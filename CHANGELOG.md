@@ -37,5 +37,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/yourusername/agent-messaging/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/yourusername/agent-messaging/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Ganzzi/agent-messaging/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Ganzzi/agent-messaging/releases/tag/v0.1.0

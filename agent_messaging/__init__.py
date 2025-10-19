@@ -2,6 +2,9 @@
 # A Python SDK for AI agent communication
 
 __version__ = "0.1.0"
+__author__ = "Ganzzi"
+__email__ = "boinguyen9701@gmail.com"
+__license__ = "MIT"
 
 from .client import AgentMessaging
 from .config import Config

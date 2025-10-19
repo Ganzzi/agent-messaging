@@ -2,7 +2,7 @@
 name = "agent-messaging"
 version = "0.1.0"
 description = "Python SDK for AI agent communication with messaging protocol"
-authors = ["Your Name <you@example.com>"]
+authors = ["Ganzzi <boinguyen9701@gmail.com>"]
 readme = "README.md"
 packages = [{include = "agent_messaging"}]
 
