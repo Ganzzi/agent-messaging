@@ -10,7 +10,14 @@ from uuid import UUID
 from ..database.repositories.agent import AgentRepository
 from ..database.repositories.meeting import MeetingRepository
 from ..database.repositories.message import MessageRepository
-from ..exceptions import AgentNotFoundError, MeetingError, NotYourTurnError, MeetingNotActiveError
+from ..exceptions import (
+    AgentNotFoundError,
+    MeetingError,
+    MeetingNotActiveError,
+    MeetingPermissionError,
+    MeetingStateError,
+    NotYourTurnError,
+)
 from ..handlers.events import MeetingEventHandler
 from ..utils.locks import SessionLock
 from ..utils.timeouts import MeetingTimeoutManager
@@ -81,8 +88,44 @@ class MeetingManager(Generic[T]):
             UUID of the created meeting
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If organizer or any participant not found
         """
+        # Input validation
+        if not organizer_external_id or not isinstance(organizer_external_id, str):
+            raise ValueError("organizer_external_id must be a non-empty string")
+        if len(organizer_external_id.strip()) == 0:
+            raise ValueError("organizer_external_id cannot be empty or whitespace")
+        if not isinstance(participant_external_ids, list):
+            raise ValueError("participant_external_ids must be a list")
+        if len(participant_external_ids) == 0:
+            raise ValueError("participant_external_ids cannot be empty")
+        if len(participant_external_ids) > 50:
+            raise ValueError("participant_external_ids cannot exceed 50 participants")
+        if turn_duration is not None:
+            if not isinstance(turn_duration, (int, float)) or turn_duration <= 0:
+                raise ValueError("turn_duration must be a positive number")
+            if turn_duration > 3600:  # 1 hour max
+                raise ValueError("turn_duration cannot exceed 3600 seconds (1 hour)")
+
+        organizer_external_id = organizer_external_id.strip()
+
+        # Validate participant IDs
+        cleaned_participants = []
+        for pid in participant_external_ids:
+            if not pid or not isinstance(pid, str):
+                raise ValueError("All participant IDs must be non-empty strings")
+            cleaned_pid = pid.strip()
+            if len(cleaned_pid) == 0:
+                raise ValueError("Participant IDs cannot be empty or whitespace")
+            if cleaned_pid == organizer_external_id:
+                raise ValueError("Organizer cannot be a participant")
+            if cleaned_pid in cleaned_participants:
+                raise ValueError("Duplicate participant IDs not allowed")
+            cleaned_participants.append(cleaned_pid)
+
+        participant_external_ids = cleaned_participants
+
         # Validate organizer exists
         organizer = await self._agent_repo.get_by_external_id(organizer_external_id)
         if not organizer:
@@ -125,10 +168,15 @@ class MeetingManager(Generic[T]):
 
         Returns:
             Meeting if found, None otherwise
-        """
-        return await self._meeting_repo.get_by_id(meeting_id)
 
-    async def get_participants(self, meeting_id: UUID) -> List[MeetingParticipant]:
+        Raises:
+            ValueError: If meeting_id is invalid
+        """
+        # Input validation
+        if not isinstance(meeting_id, UUID):
+            raise ValueError("meeting_id must be a valid UUID")
+
+        return await self._meeting_repo.get_by_id(meeting_id)
         """Get all participants for a meeting.
 
         Args:
@@ -136,7 +184,14 @@ class MeetingManager(Generic[T]):
 
         Returns:
             List of meeting participants
+
+        Raises:
+            ValueError: If meeting_id is invalid
         """
+        # Input validation
+        if not isinstance(meeting_id, UUID):
+            raise ValueError("meeting_id must be a valid UUID")
+
         return await self._meeting_repo.get_participants(meeting_id)
 
     async def update_participant_status(
@@ -151,7 +206,18 @@ class MeetingManager(Generic[T]):
             meeting_id: Meeting UUID
             agent_id: Agent UUID
             status: New participant status
+
+        Raises:
+            ValueError: If parameters are invalid
         """
+        # Input validation
+        if not isinstance(meeting_id, UUID):
+            raise ValueError("meeting_id must be a valid UUID")
+        if not isinstance(agent_id, UUID):
+            raise ValueError("agent_id must be a valid UUID")
+        if not isinstance(status, ParticipantStatus):
+            raise ValueError("status must be a valid ParticipantStatus enum value")
+
         await self._meeting_repo.update_participant_status(
             meeting_id=meeting_id,
             agent_id=agent_id,
@@ -173,9 +239,21 @@ class MeetingManager(Generic[T]):
             True if successfully marked as attending
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If agent not found
             MeetingError: If meeting not found or agent not invited
+            MeetingStateError: If meeting is in invalid state for attendance
         """
+        # Input validation
+        if not agent_external_id or not isinstance(agent_external_id, str):
+            raise ValueError("agent_external_id must be a non-empty string")
+        if len(agent_external_id.strip()) == 0:
+            raise ValueError("agent_external_id cannot be empty or whitespace")
+        if not isinstance(meeting_id, UUID):
+            raise ValueError("meeting_id must be a valid UUID")
+
+        agent_external_id = agent_external_id.strip()
+
         # Validate agent exists
         agent = await self._agent_repo.get_by_external_id(agent_external_id)
         if not agent:
@@ -185,6 +263,14 @@ class MeetingManager(Generic[T]):
         meeting = await self._meeting_repo.get_by_id(meeting_id)
         if not meeting:
             raise MeetingError(f"Meeting {meeting_id} not found")
+
+        # Validate meeting state allows attendance
+        if meeting.status == MeetingStatus.ENDED:
+            raise MeetingStateError(f"Cannot attend meeting {meeting_id} - meeting has ended")
+        if meeting.status not in [MeetingStatus.CREATED, MeetingStatus.READY, MeetingStatus.ACTIVE]:
+            raise MeetingStateError(
+                f"Meeting {meeting_id} is in invalid state for attendance: {meeting.status}"
+            )
 
         # Check if agent is a participant
         participant = await self._meeting_repo.get_participant(meeting_id, agent.id)
@@ -225,9 +311,21 @@ class MeetingManager(Generic[T]):
             meeting_id: Meeting UUID
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If host not found
             MeetingError: If meeting not found, not host, wrong status, or participants not ready
+            MeetingPermissionError: If agent is not the host
         """
+        # Input validation
+        if not host_external_id or not isinstance(host_external_id, str):
+            raise ValueError("host_external_id must be a non-empty string")
+        if len(host_external_id.strip()) == 0:
+            raise ValueError("host_external_id cannot be empty or whitespace")
+        if not isinstance(meeting_id, UUID):
+            raise ValueError("meeting_id must be a valid UUID")
+
+        host_external_id = host_external_id.strip()
+
         # Validate host exists
         host = await self._agent_repo.get_by_external_id(host_external_id)
         if not host:
@@ -239,7 +337,7 @@ class MeetingManager(Generic[T]):
             raise MeetingError(f"Meeting {meeting_id} not found")
 
         if meeting.host_id != host.id:
-            raise MeetingError(
+            raise MeetingPermissionError(
                 f"Agent '{host_external_id}' is not the host of meeting {meeting_id}"
             )
 
@@ -312,11 +410,22 @@ class MeetingManager(Generic[T]):
             Message ID of the spoken message
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If agent not found
             MeetingError: If meeting not found or agent not a participant
             MeetingNotActiveError: If meeting is not active
             NotYourTurnError: If it's not the agent's turn
         """
+        # Input validation
+        if not agent_external_id or not isinstance(agent_external_id, str):
+            raise ValueError("agent_external_id must be a non-empty string")
+        if len(agent_external_id.strip()) == 0:
+            raise ValueError("agent_external_id cannot be empty or whitespace")
+        if not isinstance(meeting_id, UUID):
+            raise ValueError("meeting_id must be a valid UUID")
+
+        agent_external_id = agent_external_id.strip()
+
         # Validate agent exists
         agent = await self._agent_repo.get_by_external_id(agent_external_id)
         if not agent:
@@ -418,9 +527,22 @@ class MeetingManager(Generic[T]):
             meeting_id: Meeting UUID
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If host not found
-            MeetingError: If meeting not found or not host
+            MeetingError: If meeting not found
+            MeetingPermissionError: If agent is not the host
+            MeetingStateError: If meeting is not active
         """
+        # Input validation
+        if not host_external_id or not isinstance(host_external_id, str):
+            raise ValueError("host_external_id must be a non-empty string")
+        if len(host_external_id.strip()) == 0:
+            raise ValueError("host_external_id cannot be empty or whitespace")
+        if not isinstance(meeting_id, UUID):
+            raise ValueError("meeting_id must be a valid UUID")
+
+        host_external_id = host_external_id.strip()
+
         # Validate host exists
         host = await self._agent_repo.get_by_external_id(host_external_id)
         if not host:
@@ -432,8 +554,16 @@ class MeetingManager(Generic[T]):
             raise MeetingError(f"Meeting {meeting_id} not found")
 
         if meeting.host_id != host.id:
-            raise MeetingError(
+            raise MeetingPermissionError(
                 f"Agent '{host_external_id}' is not the host of meeting {meeting_id}"
+            )
+
+        # Validate meeting state
+        if meeting.status == MeetingStatus.ENDED:
+            raise MeetingStateError(f"Meeting {meeting_id} is already ended")
+        if meeting.status not in [MeetingStatus.CREATED, MeetingStatus.READY, MeetingStatus.ACTIVE]:
+            raise MeetingStateError(
+                f"Meeting {meeting_id} cannot be ended from status: {meeting.status}"
             )
 
         # Cancel any active timeouts
@@ -479,9 +609,21 @@ class MeetingManager(Generic[T]):
             meeting_id: Meeting UUID
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If agent not found
             MeetingError: If meeting not found, agent not participant, or agent is host
+            MeetingStateError: If meeting is ended
         """
+        # Input validation
+        if not agent_external_id or not isinstance(agent_external_id, str):
+            raise ValueError("agent_external_id must be a non-empty string")
+        if len(agent_external_id.strip()) == 0:
+            raise ValueError("agent_external_id cannot be empty or whitespace")
+        if not isinstance(meeting_id, UUID):
+            raise ValueError("meeting_id must be a valid UUID")
+
+        agent_external_id = agent_external_id.strip()
+
         # Validate agent exists
         agent = await self._agent_repo.get_by_external_id(agent_external_id)
         if not agent:
@@ -491,6 +633,14 @@ class MeetingManager(Generic[T]):
         meeting = await self._meeting_repo.get_by_id(meeting_id)
         if not meeting:
             raise MeetingError(f"Meeting {meeting_id} not found")
+
+        # Validate meeting state
+        if meeting.status == MeetingStatus.ENDED:
+            raise MeetingStateError(f"Meeting {meeting_id} is already ended")
+        if meeting.status not in [MeetingStatus.CREATED, MeetingStatus.READY, MeetingStatus.ACTIVE]:
+            raise MeetingStateError(
+                f"Meeting {meeting_id} cannot be left from status: {meeting.status}"
+            )
 
         # Check if agent is host (hosts cannot leave)
         if meeting.host_id == agent.id:
@@ -565,7 +715,14 @@ class MeetingManager(Generic[T]):
 
         Returns:
             Dict with meeting status info, or None if meeting not found
+
+        Raises:
+            ValueError: If meeting_id is invalid
         """
+        # Input validation
+        if not isinstance(meeting_id, UUID):
+            raise ValueError("meeting_id must be a valid UUID")
+
         meeting = await self._meeting_repo.get_by_id(meeting_id)
         if not meeting:
             return None
@@ -600,11 +757,8 @@ class MeetingManager(Generic[T]):
             "meeting_id": str(meeting_id),
             "host_id": str(meeting.host_id),
             "status": meeting.status.value,
-            "current_speaker": current_speaker,
             "turn_duration": meeting.turn_duration,
-            "turn_started_at": (
-                meeting.turn_started_at.isoformat() if meeting.turn_started_at else None
-            ),
+            "current_speaker": current_speaker,
             "created_at": meeting.created_at.isoformat(),
             "started_at": meeting.started_at.isoformat() if meeting.started_at else None,
             "ended_at": meeting.ended_at.isoformat() if meeting.ended_at else None,
@@ -619,7 +773,14 @@ class MeetingManager(Generic[T]):
 
         Returns:
             List of messages in chronological order
+
+        Raises:
+            ValueError: If meeting_id is invalid
         """
+        # Input validation
+        if not isinstance(meeting_id, UUID):
+            raise ValueError("meeting_id must be a valid UUID")
+
         # Get all messages for this meeting
         # Note: This is a simplified implementation. In a real system,
         # you'd want to add a method to MessageRepository to get messages by meeting_id

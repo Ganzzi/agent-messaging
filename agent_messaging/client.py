@@ -109,10 +109,24 @@ class AgentMessaging(Generic[T]):
             UUID of the created organization
 
         Raises:
+            ValueError: If external_id or name are invalid
             DatabaseError: If creation fails
         """
         if not self._org_repo:
             raise RuntimeError("SDK not initialized. Use 'async with' context manager.")
+
+        # Input validation
+        if not external_id or not isinstance(external_id, str):
+            raise ValueError("external_id must be a non-empty string")
+        if not name or not isinstance(name, str):
+            raise ValueError("name must be a non-empty string")
+        if len(external_id.strip()) == 0:
+            raise ValueError("external_id cannot be empty or whitespace")
+        if len(name.strip()) == 0:
+            raise ValueError("name cannot be empty or whitespace")
+
+        external_id = external_id.strip()
+        name = name.strip()
 
         logger.info(f"Registering organization: {external_id}")
         org_id = await self._org_repo.create(external_id, name)
@@ -129,10 +143,19 @@ class AgentMessaging(Generic[T]):
             Organization model
 
         Raises:
+            ValueError: If external_id is invalid
             OrganizationNotFoundError: If not found
         """
         if not self._org_repo:
             raise RuntimeError("SDK not initialized. Use 'async with' context manager.")
+
+        # Input validation
+        if not external_id or not isinstance(external_id, str):
+            raise ValueError("external_id must be a non-empty string")
+        if len(external_id.strip()) == 0:
+            raise ValueError("external_id cannot be empty or whitespace")
+
+        external_id = external_id.strip()
 
         org = await self._org_repo.get_by_external_id(external_id)
         if not org:
@@ -157,11 +180,30 @@ class AgentMessaging(Generic[T]):
             UUID of the created agent
 
         Raises:
+            ValueError: If parameters are invalid
             OrganizationNotFoundError: If organization not found
             DatabaseError: If creation fails
         """
         if not self._agent_repo or not self._org_repo:
             raise RuntimeError("SDK not initialized. Use 'async with' context manager.")
+
+        # Input validation
+        if not external_id or not isinstance(external_id, str):
+            raise ValueError("external_id must be a non-empty string")
+        if not organization_external_id or not isinstance(organization_external_id, str):
+            raise ValueError("organization_external_id must be a non-empty string")
+        if not name or not isinstance(name, str):
+            raise ValueError("name must be a non-empty string")
+        if len(external_id.strip()) == 0:
+            raise ValueError("external_id cannot be empty or whitespace")
+        if len(organization_external_id.strip()) == 0:
+            raise ValueError("organization_external_id cannot be empty or whitespace")
+        if len(name.strip()) == 0:
+            raise ValueError("name cannot be empty or whitespace")
+
+        external_id = external_id.strip()
+        organization_external_id = organization_external_id.strip()
+        name = name.strip()
 
         logger.info(f"Registering agent: {external_id}")
 
@@ -185,10 +227,19 @@ class AgentMessaging(Generic[T]):
             Agent model
 
         Raises:
+            ValueError: If external_id is invalid
             AgentNotFoundError: If not found
         """
         if not self._agent_repo:
             raise RuntimeError("SDK not initialized. Use 'async with' context manager.")
+
+        # Input validation
+        if not external_id or not isinstance(external_id, str):
+            raise ValueError("external_id must be a non-empty string")
+        if len(external_id.strip()) == 0:
+            raise ValueError("external_id cannot be empty or whitespace")
+
+        external_id = external_id.strip()
 
         agent = await self._agent_repo.get_by_external_id(external_id)
         if not agent:
@@ -210,12 +261,23 @@ class AgentMessaging(Generic[T]):
         Returns:
             Decorator function
 
+        Raises:
+            ValueError: If agent_external_id is invalid
+
         Example:
             @sdk.register_handler("alice")
             async def handle_alice(message: T, context: MessageContext) -> Optional[T]:
                 print(f"Received: {message}")
                 return {"response": "OK"}
         """
+        # Input validation
+        if not agent_external_id or not isinstance(agent_external_id, str):
+            raise ValueError("agent_external_id must be a non-empty string")
+        if len(agent_external_id.strip()) == 0:
+            raise ValueError("agent_external_id cannot be empty or whitespace")
+
+        agent_external_id = agent_external_id.strip()
+
         logger.info(f"Registering handler for agent: {agent_external_id}")
         return self._handler_registry.register(agent_external_id)
 
@@ -227,7 +289,18 @@ class AgentMessaging(Generic[T]):
 
         Returns:
             True if handler is registered
+
+        Raises:
+            ValueError: If agent_external_id is invalid
         """
+        # Input validation
+        if not agent_external_id or not isinstance(agent_external_id, str):
+            raise ValueError("agent_external_id must be a non-empty string")
+        if len(agent_external_id.strip()) == 0:
+            raise ValueError("agent_external_id cannot be empty or whitespace")
+
+        agent_external_id = agent_external_id.strip()
+
         return self._handler_registry.has_handler(agent_external_id)
 
     def register_event_handler(self, event_type: MeetingEventType):
@@ -241,11 +314,17 @@ class AgentMessaging(Generic[T]):
         Returns:
             Decorator function
 
+        Raises:
+            ValueError: If event_type is invalid
+
         Example:
             @sdk.register_event_handler(MeetingEvent.TURN_CHANGED)
             async def on_turn_changed(event: MeetingEventPayload):
                 print(f"Turn changed in meeting {event.meeting_id}")
         """
+        # Input validation
+        if not isinstance(event_type, MeetingEventType):
+            raise ValueError("event_type must be a valid MeetingEventType")
 
         def decorator(handler):
             self._event_handler.register_handler(event_type, handler)

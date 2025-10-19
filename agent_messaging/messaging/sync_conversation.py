@@ -10,7 +10,13 @@ from uuid import UUID
 from ..database.repositories.agent import AgentRepository
 from ..database.repositories.message import MessageRepository
 from ..database.repositories.session import SessionRepository
-from ..exceptions import AgentNotFoundError, NoHandlerRegisteredError, TimeoutError
+from ..exceptions import (
+    AgentNotFoundError,
+    NoHandlerRegisteredError,
+    SessionLockError,
+    SessionStateError,
+    TimeoutError,
+)
 from ..handlers.registry import HandlerRegistry
 from ..models import MessageContext, MessageType, SessionStatus, SessionType
 from ..utils.locks import SessionLock
@@ -94,6 +100,7 @@ class SyncConversation(Generic[T]):
             Response message from recipient
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If sender or recipient doesn't exist
             NoHandlerRegisteredError: If recipient has no handler
             TimeoutError: If no response within timeout
@@ -106,6 +113,25 @@ class SyncConversation(Generic[T]):
                 timeout=60.0
             )
         """
+        # Input validation
+        if not sender_external_id or not isinstance(sender_external_id, str):
+            raise ValueError("sender_external_id must be a non-empty string")
+        if not recipient_external_id or not isinstance(recipient_external_id, str):
+            raise ValueError("recipient_external_id must be a non-empty string")
+        if len(sender_external_id.strip()) == 0:
+            raise ValueError("sender_external_id cannot be empty or whitespace")
+        if len(recipient_external_id.strip()) == 0:
+            raise ValueError("recipient_external_id cannot be empty or whitespace")
+        if sender_external_id == recipient_external_id:
+            raise ValueError("sender and recipient cannot be the same agent")
+        if timeout <= 0:
+            raise ValueError("timeout must be positive")
+        if timeout > 300:  # 5 minutes max
+            raise ValueError("timeout cannot exceed 300 seconds")
+
+        sender_external_id = sender_external_id.strip()
+        recipient_external_id = recipient_external_id.strip()
+
         logger.info(
             f"Starting sync conversation from {sender_external_id} to {recipient_external_id}"
         )
@@ -134,6 +160,18 @@ class SyncConversation(Generic[T]):
             session = await self._session_repo.get_by_id(session_id)
             if not session:
                 raise RuntimeError("Failed to create session")
+
+        # Validate session state
+        if session.status != SessionStatus.ACTIVE:
+            raise SessionStateError(
+                f"Session {session.id} is not active (status: {session.status})"
+            )
+        if session.locked_agent_id is not None:
+            locked_agent = await self._agent_repo.get_by_id(session.locked_agent_id)
+            locked_agent_name = locked_agent.external_id if locked_agent else "unknown"
+            raise SessionLockError(
+                f"Session {session.id} is already locked by agent {locked_agent_name}"
+            )
 
         # Create session lock
         session_lock = SessionLock(session.id)
@@ -226,6 +264,7 @@ class SyncConversation(Generic[T]):
             message: Response message
 
         Raises:
+            ValueError: If parameters are invalid
             RuntimeError: If session not found or not waiting for response
 
         Example:
@@ -236,12 +275,30 @@ class SyncConversation(Generic[T]):
                 SupportResponse(answer="Click reset link")
             )
         """
+        # Input validation
+        if not isinstance(session_id, UUID):
+            raise ValueError("session_id must be a valid UUID")
+        if not responder_external_id or not isinstance(responder_external_id, str):
+            raise ValueError("responder_external_id must be a non-empty string")
+        if len(responder_external_id.strip()) == 0:
+            raise ValueError("responder_external_id cannot be empty or whitespace")
+
+        responder_external_id = responder_external_id.strip()
+
         logger.info(f"Replying to sync conversation {session_id} from {responder_external_id}")
 
         # Validate session exists
         session = await self._session_repo.get_by_id(session_id)
         if not session:
             raise RuntimeError(f"Session not found: {session_id}")
+
+        # Validate session state
+        if session.status != SessionStatus.ACTIVE:
+            raise SessionStateError(
+                f"Session {session_id} is not active (status: {session.status})"
+            )
+        if session.session_type != SessionType.SYNC:
+            raise SessionStateError(f"Session {session_id} is not a sync conversation")
 
         # Validate responder is the recipient
         responder = await self._agent_repo.get_by_external_id(responder_external_id)
@@ -250,6 +307,12 @@ class SyncConversation(Generic[T]):
 
         if responder.id not in [session.agent_a_id, session.agent_b_id]:
             raise RuntimeError(f"Agent {responder_external_id} not part of session {session_id}")
+
+        # Validate responder is not the locked agent (should be the recipient, not the sender)
+        if session.locked_agent_id == responder.id:
+            raise SessionStateError(
+                f"Agent {responder_external_id} is the locked sender, not the responder"
+            )
 
         # Store response
         self._waiting_responses[session_id] = message
@@ -273,9 +336,25 @@ class SyncConversation(Generic[T]):
             other_agent_external_id: External ID of the other agent
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If agents don't exist
             RuntimeError: If no active session found
         """
+        # Input validation
+        if not agent_external_id or not isinstance(agent_external_id, str):
+            raise ValueError("agent_external_id must be a non-empty string")
+        if not other_agent_external_id or not isinstance(other_agent_external_id, str):
+            raise ValueError("other_agent_external_id must be a non-empty string")
+        if len(agent_external_id.strip()) == 0:
+            raise ValueError("agent_external_id cannot be empty or whitespace")
+        if len(other_agent_external_id.strip()) == 0:
+            raise ValueError("other_agent_external_id cannot be empty or whitespace")
+        if agent_external_id == other_agent_external_id:
+            raise ValueError("agent_external_id and other_agent_external_id cannot be the same")
+
+        agent_external_id = agent_external_id.strip()
+        other_agent_external_id = other_agent_external_id.strip()
+
         logger.info(
             f"Ending conversation between {agent_external_id} and {other_agent_external_id}"
         )

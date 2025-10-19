@@ -100,6 +100,7 @@ class AsyncConversation(Generic[T]):
             Session ID for tracking this conversation
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If sender or recipient doesn't exist
 
         Example:
@@ -110,6 +111,21 @@ class AsyncConversation(Generic[T]):
             )
             # Alice continues immediately
         """
+        # Input validation
+        if not sender_external_id or not isinstance(sender_external_id, str):
+            raise ValueError("sender_external_id must be a non-empty string")
+        if not recipient_external_id or not isinstance(recipient_external_id, str):
+            raise ValueError("recipient_external_id must be a non-empty string")
+        if len(sender_external_id.strip()) == 0:
+            raise ValueError("sender_external_id cannot be empty or whitespace")
+        if len(recipient_external_id.strip()) == 0:
+            raise ValueError("recipient_external_id cannot be empty or whitespace")
+        if sender_external_id == recipient_external_id:
+            raise ValueError("sender and recipient cannot be the same agent")
+
+        sender_external_id = sender_external_id.strip()
+        recipient_external_id = recipient_external_id.strip()
+
         logger.info(f"Sending async message from {sender_external_id} to {recipient_external_id}")
 
         # Validate agents exist
@@ -178,6 +194,7 @@ class AsyncConversation(Generic[T]):
             List of unread messages (ordered by creation time)
 
         Raises:
+            ValueError: If agent_external_id is invalid
             AgentNotFoundError: If agent doesn't exist
 
         Example:
@@ -185,6 +202,14 @@ class AsyncConversation(Generic[T]):
             for msg in messages:
                 print(f"Message: {msg}")
         """
+        # Input validation
+        if not agent_external_id or not isinstance(agent_external_id, str):
+            raise ValueError("agent_external_id must be a non-empty string")
+        if len(agent_external_id.strip()) == 0:
+            raise ValueError("agent_external_id cannot be empty or whitespace")
+
+        agent_external_id = agent_external_id.strip()
+
         logger.info(f"Getting unread messages for {agent_external_id}")
 
         # Validate agent exists
@@ -225,6 +250,7 @@ class AsyncConversation(Generic[T]):
             List of messages from sender (ordered by creation time)
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If either agent doesn't exist
 
         Example:
@@ -233,6 +259,21 @@ class AsyncConversation(Generic[T]):
                 "alice"
             )
         """
+        # Input validation
+        if not recipient_external_id or not isinstance(recipient_external_id, str):
+            raise ValueError("recipient_external_id must be a non-empty string")
+        if not sender_external_id or not isinstance(sender_external_id, str):
+            raise ValueError("sender_external_id must be a non-empty string")
+        if len(recipient_external_id.strip()) == 0:
+            raise ValueError("recipient_external_id cannot be empty or whitespace")
+        if len(sender_external_id.strip()) == 0:
+            raise ValueError("sender_external_id cannot be empty or whitespace")
+        if recipient_external_id == sender_external_id:
+            raise ValueError("recipient and sender cannot be the same agent")
+
+        recipient_external_id = recipient_external_id.strip()
+        sender_external_id = sender_external_id.strip()
+
         logger.info(f"Getting messages from {sender_external_id} to {recipient_external_id}")
 
         # Validate agents exist

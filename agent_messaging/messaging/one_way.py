@@ -80,6 +80,7 @@ class OneWayMessenger(Generic[T]):
             Message ID (UUID as string)
 
         Raises:
+            ValueError: If parameters are invalid
             AgentNotFoundError: If sender or recipient doesn't exist
             NoHandlerRegisteredError: If recipient has no handler
 
@@ -90,6 +91,21 @@ class OneWayMessenger(Generic[T]):
                 MyMessage(text="Hello!")
             )
         """
+        # Input validation
+        if not sender_external_id or not isinstance(sender_external_id, str):
+            raise ValueError("sender_external_id must be a non-empty string")
+        if not recipient_external_id or not isinstance(recipient_external_id, str):
+            raise ValueError("recipient_external_id must be a non-empty string")
+        if len(sender_external_id.strip()) == 0:
+            raise ValueError("sender_external_id cannot be empty or whitespace")
+        if len(recipient_external_id.strip()) == 0:
+            raise ValueError("recipient_external_id cannot be empty or whitespace")
+        if sender_external_id == recipient_external_id:
+            raise ValueError("sender and recipient cannot be the same agent")
+
+        sender_external_id = sender_external_id.strip()
+        recipient_external_id = recipient_external_id.strip()
+
         logger.info(f"Sending one-way message from {sender_external_id} to {recipient_external_id}")
 
         # Validate sender exists

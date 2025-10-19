@@ -29,6 +29,7 @@ from agent_messaging.exceptions import (
     NoHandlerRegisteredError,
     TimeoutError,
     MeetingError,
+    MeetingPermissionError,
 )
 
 
@@ -955,8 +956,8 @@ class TestMeetingManager:
 
         # Create meeting
         meeting_id = await meeting_manager.create_meeting(
-            host_id="alice",
-            participant_ids=["bob", "charlie"],
+            organizer_external_id="alice",
+            participant_external_ids=["bob", "charlie"],
             turn_duration=60.0,
         )
 
@@ -1054,7 +1055,7 @@ class TestMeetingManager:
         mock_agent_repo.get_by_external_id = AsyncMock(return_value=non_host)
         mock_meeting_repo.get_by_id = AsyncMock(return_value=sample_meeting)
 
-        with pytest.raises(MeetingError, match="Only the host can start the meeting"):
+        with pytest.raises(MeetingPermissionError, match="Agent 'bob' is not the host"):
             await meeting_manager.start_meeting("bob", sample_meeting.id)
 
     @pytest.mark.asyncio
@@ -1164,9 +1165,7 @@ class TestMeetingManager:
         mock_meeting_repo.get_meeting = AsyncMock(return_value=active_meeting)
 
         # End meeting
-        await meeting_manager.end_meeting(
-            "alice", active_meeting.id, {"text": "Meeting adjourned!"}
-        )
+        await meeting_manager.end_meeting("alice", active_meeting.id)
 
         # Verify meeting ended
         mock_meeting_repo.update_meeting_status.assert_called_with(
@@ -1189,7 +1188,7 @@ class TestMeetingManager:
 
         # Verify status returned
         assert status is not None
-        assert "meeting" in status
+        assert "meeting_id" in status
         assert "participants" in status
         assert "current_speaker" in status
 
