@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from agent_messaging.messaging.one_way import OneWayMessenger
 from agent_messaging.messaging.sync_conversation import SyncConversation
+from agent_messaging.messaging.async_conversation import AsyncConversation
 from agent_messaging.models import (
     Agent,
     MessageContext,
@@ -462,4 +463,344 @@ class TestSyncConversation:
     def test_serialize_content_other(self, sync_conversation):
         """Test content serialization for other types."""
         result = sync_conversation._serialize_content("plain string")
+        assert result == {"data": "plain string"}
+
+
+@pytest.fixture
+def mock_session_repo():
+    """Mock session repository for testing."""
+    repo = MagicMock()
+    return repo
+
+
+@pytest.fixture
+def async_conversation(
+    mock_handler_registry, mock_message_repo, mock_session_repo, mock_agent_repo
+):
+    """AsyncConversation instance for testing."""
+    return AsyncConversation(
+        handler_registry=mock_handler_registry,
+        message_repo=mock_message_repo,
+        session_repo=mock_session_repo,
+        agent_repo=mock_agent_repo,
+    )
+
+
+class TestAsyncConversation:
+    """Test cases for AsyncConversation."""
+
+    @pytest.mark.asyncio
+    async def test_send_success(
+        self,
+        async_conversation,
+        mock_agent_repo,
+        mock_session_repo,
+        mock_message_repo,
+        mock_handler_registry,
+    ):
+        """Test successful async message sending."""
+        # Setup mock agents
+        sender = Agent(
+            id=uuid4(),
+            external_id="alice",
+            organization_id=uuid4(),
+            name="Alice",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+        recipient = Agent(
+            id=uuid4(),
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        # Setup mock session
+        session_id = uuid4()
+        session = Session(
+            id=session_id,
+            agent_a_id=sender.id,
+            agent_b_id=recipient.id,
+            session_type=SessionType.ASYNC,
+            status=SessionStatus.ACTIVE,
+            locked_agent_id=None,
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+            ended_at=None,
+        )
+
+        mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[sender, recipient])
+        mock_session_repo.get_active_session = AsyncMock(return_value=None)
+        mock_session_repo.create = AsyncMock(return_value=session_id)
+        mock_session_repo.get_by_id = AsyncMock(return_value=session)
+        mock_message_repo.create = AsyncMock(return_value=uuid4())
+
+        # Send message
+        result_session_id = await async_conversation.send("alice", "bob", {"text": "Hello!"})
+
+        # Verify session ID was returned
+        assert result_session_id == session_id
+
+        # Verify session was created
+        mock_session_repo.create.assert_called_once_with(sender.id, recipient.id, SessionType.ASYNC)
+
+        # Verify message was created
+        mock_message_repo.create.assert_called_once()
+        call_args = mock_message_repo.create.call_args
+        assert call_args[1]["sender_id"] == sender.id
+        assert call_args[1]["recipient_id"] == recipient.id
+        assert call_args[1]["session_id"] == session_id
+        assert call_args[1]["content"] == {"text": "Hello!"}
+        assert call_args[1]["message_type"] == MessageType.USER_DEFINED
+
+        # Verify handler was invoked
+        mock_handler_registry.invoke_handler_async.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_send_sender_not_found(self, async_conversation, mock_agent_repo):
+        """Test send with non-existent sender."""
+        mock_agent_repo.get_by_external_id = AsyncMock(return_value=None)
+
+        with pytest.raises(AgentNotFoundError, match="Sender agent not found: alice"):
+            await async_conversation.send("alice", "bob", {"text": "Hello!"})
+
+    @pytest.mark.asyncio
+    async def test_send_recipient_not_found(self, async_conversation, mock_agent_repo):
+        """Test send with non-existent recipient."""
+        sender = Agent(
+            id=uuid4(),
+            external_id="alice",
+            organization_id=uuid4(),
+            name="Alice",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[sender, None])
+
+        with pytest.raises(AgentNotFoundError, match="Recipient agent not found: bob"):
+            await async_conversation.send("alice", "bob", {"text": "Hello!"})
+
+    @pytest.mark.asyncio
+    async def test_get_unread_messages(
+        self, async_conversation, mock_agent_repo, mock_message_repo
+    ):
+        """Test getting unread messages for an agent."""
+        from agent_messaging.models import Message
+
+        # Setup mock agent
+        agent_id = uuid4()
+        agent = Agent(
+            id=agent_id,
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        # Setup mock messages
+        message1 = Message(
+            id=uuid4(),
+            sender_id=uuid4(),
+            recipient_id=agent_id,
+            session_id=uuid4(),
+            meeting_id=None,
+            message_type=MessageType.USER_DEFINED,
+            content={"text": "Hello 1"},
+            read_at=None,
+            created_at=MagicMock(),
+            metadata=None,
+        )
+        message2 = Message(
+            id=uuid4(),
+            sender_id=uuid4(),
+            recipient_id=agent_id,
+            session_id=uuid4(),
+            meeting_id=None,
+            message_type=MessageType.USER_DEFINED,
+            content={"text": "Hello 2"},
+            read_at=None,
+            created_at=MagicMock(),
+            metadata=None,
+        )
+
+        mock_agent_repo.get_by_external_id = AsyncMock(return_value=agent)
+        mock_message_repo.get_unread_messages = AsyncMock(return_value=[message1, message2])
+        mock_message_repo.mark_as_read = AsyncMock()
+
+        # Get unread messages
+        messages = await async_conversation.get_unread_messages("bob")
+
+        # Verify results
+        assert len(messages) == 2
+        assert messages[0] == {"text": "Hello 1"}
+        assert messages[1] == {"text": "Hello 2"}
+
+        # Verify messages were marked as read
+        assert mock_message_repo.mark_as_read.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_get_messages_from_agent(
+        self, async_conversation, mock_agent_repo, mock_message_repo
+    ):
+        """Test getting messages from a specific agent."""
+        from agent_messaging.models import Message
+
+        # Setup mock agents
+        recipient_id = uuid4()
+        sender_id = uuid4()
+        recipient = Agent(
+            id=recipient_id,
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+        sender = Agent(
+            id=sender_id,
+            external_id="alice",
+            organization_id=uuid4(),
+            name="Alice",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        # Setup mock message
+        message = Message(
+            id=uuid4(),
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            session_id=uuid4(),
+            meeting_id=None,
+            message_type=MessageType.USER_DEFINED,
+            content={"text": "Hello from Alice"},
+            read_at=None,
+            created_at=MagicMock(),
+            metadata=None,
+        )
+
+        mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[recipient, sender])
+        mock_message_repo.get_messages_between_agents = AsyncMock(return_value=[message])
+        mock_message_repo.mark_as_read = AsyncMock()
+
+        # Get messages
+        messages = await async_conversation.get_messages_from_agent("bob", "alice")
+
+        # Verify results
+        assert len(messages) == 1
+        assert messages[0] == {"text": "Hello from Alice"}
+
+        # Verify message was marked as read
+        mock_message_repo.mark_as_read.assert_called_once_with(message.id)
+
+    @pytest.mark.asyncio
+    async def test_wait_for_message_success(
+        self, async_conversation, mock_agent_repo, mock_message_repo
+    ):
+        """Test waiting for a message from a specific agent."""
+        from agent_messaging.models import Message
+
+        # Setup mock agents
+        recipient_id = uuid4()
+        sender_id = uuid4()
+        recipient = Agent(
+            id=recipient_id,
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+        sender = Agent(
+            id=sender_id,
+            external_id="alice",
+            organization_id=uuid4(),
+            name="Alice",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        # Setup mock message
+        message = Message(
+            id=uuid4(),
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            session_id=uuid4(),
+            meeting_id=None,
+            message_type=MessageType.USER_DEFINED,
+            content={"text": "Hello Bob"},
+            read_at=None,
+            created_at=MagicMock(),
+            metadata=None,
+        )
+
+        mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[recipient, sender])
+        mock_message_repo.get_unread_messages_from_sender = AsyncMock(return_value=[message])
+        mock_message_repo.mark_as_read = AsyncMock()
+
+        # Wait for message
+        result = await async_conversation.wait_for_message("bob", "alice", timeout=1.0)
+
+        # Verify result
+        assert result == {"text": "Hello Bob"}
+        mock_message_repo.mark_as_read.assert_called_once_with(message.id)
+
+    @pytest.mark.asyncio
+    async def test_wait_for_message_timeout(
+        self, async_conversation, mock_agent_repo, mock_message_repo
+    ):
+        """Test waiting for a message with timeout."""
+        # Setup mock agents
+        recipient_id = uuid4()
+        sender_id = uuid4()
+        recipient = Agent(
+            id=recipient_id,
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+        sender = Agent(
+            id=sender_id,
+            external_id="alice",
+            organization_id=uuid4(),
+            name="Alice",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[recipient, sender])
+        mock_message_repo.get_unread_messages_from_sender = AsyncMock(return_value=[])
+
+        # Wait for message (should timeout)
+        result = await async_conversation.wait_for_message("bob", "alice", timeout=0.1)
+
+        # Verify timeout
+        assert result is None
+
+    def test_serialize_content_dict(self, async_conversation):
+        """Test content serialization for dict input."""
+        result = async_conversation._serialize_content({"text": "Hello!"})
+        assert result == {"text": "Hello!"}
+
+    def test_serialize_content_pydantic(self, async_conversation):
+        """Test content serialization for Pydantic model input."""
+        from pydantic import BaseModel
+
+        class TestMessage(BaseModel):
+            text: str
+            number: int
+
+        message = TestMessage(text="Hello!", number=42)
+        result = async_conversation._serialize_content(message)
+        assert result == {"text": "Hello!", "number": 42}
+
+    def test_serialize_content_other(self, async_conversation):
+        """Test content serialization for other types."""
+        result = async_conversation._serialize_content("plain string")
         assert result == {"data": "plain string"}

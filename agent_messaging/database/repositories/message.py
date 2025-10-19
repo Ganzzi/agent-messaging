@@ -173,6 +173,76 @@ class MessageRepository(BaseRepository):
         """
         await self._execute(query, [str(message_id)])
 
+    async def get_unread_messages(self, recipient_id: UUID) -> List[Message]:
+        """Get unread messages for a recipient.
+
+        Args:
+            recipient_id: Recipient UUID
+
+        Returns:
+            List of unread messages ordered by creation time
+        """
+        query = """
+            SELECT id, sender_id, recipient_id, session_id, meeting_id,
+                   message_type, content, read_at, created_at, metadata
+            FROM messages
+            WHERE recipient_id = $1 AND read_at IS NULL
+            ORDER BY created_at ASC
+        """
+        results = await self._fetch_all(query, [str(recipient_id)])
+        return [self._message_from_db(result) for result in results]
+
+    async def get_messages_between_agents(
+        self,
+        recipient_id: UUID,
+        sender_id: UUID,
+        limit: int = 100,
+    ) -> List[Message]:
+        """Get messages between two specific agents.
+
+        Args:
+            recipient_id: Recipient agent UUID
+            sender_id: Sender agent UUID
+            limit: Maximum number of messages
+
+        Returns:
+            List of messages ordered by creation time
+        """
+        query = """
+            SELECT id, sender_id, recipient_id, session_id, meeting_id,
+                   message_type, content, read_at, created_at, metadata
+            FROM messages
+            WHERE recipient_id = $1 AND sender_id = $2
+            ORDER BY created_at ASC
+            LIMIT $3
+        """
+        results = await self._fetch_all(query, [str(recipient_id), str(sender_id), limit])
+        return [self._message_from_db(result) for result in results]
+
+    async def get_unread_messages_from_sender(
+        self,
+        recipient_id: UUID,
+        sender_id: UUID,
+    ) -> List[Message]:
+        """Get unread messages from a specific sender.
+
+        Args:
+            recipient_id: Recipient agent UUID
+            sender_id: Sender agent UUID
+
+        Returns:
+            List of unread messages ordered by creation time
+        """
+        query = """
+            SELECT id, sender_id, recipient_id, session_id, meeting_id,
+                   message_type, content, read_at, created_at, metadata
+            FROM messages
+            WHERE recipient_id = $1 AND sender_id = $2 AND read_at IS NULL
+            ORDER BY created_at ASC
+        """
+        results = await self._fetch_all(query, [str(recipient_id), str(sender_id)])
+        return [self._message_from_db(result) for result in results]
+
     def _message_from_db(self, result: Dict[str, Any]) -> Message:
         """Convert database row to Message model.
 
