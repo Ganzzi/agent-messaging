@@ -1,0 +1,19 @@
+# Manifest file for packaging
+
+recursive-include agent_messaging *.py
+recursive-include tests *.py
+recursive-include migrations *.sql
+recursive-include docs *.md
+
+include README.md
+include LICENSE
+include CONTRIBUTING.md
+include CHANGELOG.md
+include .env.example
+
+exclude .git
+exclude .gitignore
+exclude __pycache__
+exclude *.pyc
+exclude .pytest_cache
+exclude htmlcov
