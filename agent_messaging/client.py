@@ -18,6 +18,7 @@ from .handlers.registry import HandlerRegistry
 from .messaging.one_way import OneWayMessenger
 from .messaging.sync_conversation import SyncConversation
 from .messaging.async_conversation import AsyncConversation
+from .messaging.meeting import MeetingManager
 from .models import CreateAgentRequest, CreateOrganizationRequest
 
 logger = logging.getLogger(__name__)
@@ -305,5 +306,16 @@ class AgentMessaging(Generic[T]):
             handler_registry=self._handler_registry,
             message_repo=self._message_repo,
             session_repo=self._session_repo,
+            agent_repo=self._agent_repo,
+        )
+
+    @property
+    def meeting(self) -> "MeetingManager[T]":
+        """Get meeting manager for multi-agent meetings."""
+        from .messaging.meeting import MeetingManager
+
+        return MeetingManager[T](
+            meeting_repo=self._meeting_repo,
+            message_repo=self._message_repo,
             agent_repo=self._agent_repo,
         )

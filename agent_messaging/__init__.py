@@ -15,9 +15,11 @@ from .exceptions import (
     NoHandlerRegisteredError,
     HandlerTimeoutError,
     MeetingNotFoundError,
+    MeetingError,
     TimeoutError,
 )
-from .messaging import OneWayMessenger, SyncConversation, AsyncConversation
+from .messaging import OneWayMessenger, SyncConversation, AsyncConversation, MeetingManager
+from .utils import MeetingTimeoutManager
 
 __all__ = [
     "AgentMessaging",
@@ -25,11 +27,14 @@ __all__ = [
     "OneWayMessenger",
     "SyncConversation",
     "AsyncConversation",
+    "MeetingManager",
+    "MeetingTimeoutManager",
     "AgentMessagingError",
     "AgentNotFoundError",
     "OrganizationNotFoundError",
     "NoHandlerRegisteredError",
     "HandlerTimeoutError",
     "MeetingNotFoundError",
+    "MeetingError",
     "TimeoutError",
 ]

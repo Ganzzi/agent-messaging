@@ -55,6 +55,12 @@ class MeetingNotFoundError(AgentMessagingError):
     pass
 
 
+class MeetingError(AgentMessagingError):
+    """Base class for meeting-related errors."""
+
+    pass
+
+
 class MeetingNotActiveError(AgentMessagingError):
     """Raised when attempting to perform actions on an inactive meeting."""
 
