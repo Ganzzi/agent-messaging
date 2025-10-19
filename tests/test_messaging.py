@@ -6,8 +6,16 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 from agent_messaging.messaging.one_way import OneWayMessenger
-from agent_messaging.models import Agent, MessageContext, MessageType
-from agent_messaging.exceptions import AgentNotFoundError, NoHandlerRegisteredError
+from agent_messaging.messaging.sync_conversation import SyncConversation
+from agent_messaging.models import (
+    Agent,
+    MessageContext,
+    MessageType,
+    Session,
+    SessionStatus,
+    SessionType,
+)
+from agent_messaging.exceptions import AgentNotFoundError, NoHandlerRegisteredError, TimeoutError
 
 
 @pytest.fixture
@@ -165,4 +173,293 @@ class TestOneWayMessenger:
     def test_serialize_content_other(self, one_way_messenger):
         """Test content serialization for other types."""
         result = one_way_messenger._serialize_content("plain string")
+        assert result == {"data": "plain string"}
+
+
+# SyncConversation Fixtures and Tests
+
+
+@pytest.fixture
+def mock_session_repo():
+    """Mock session repository for testing."""
+    repo = MagicMock()
+    return repo
+
+
+@pytest.fixture
+def sync_conversation(mock_handler_registry, mock_message_repo, mock_session_repo, mock_agent_repo):
+    """SyncConversation instance for testing."""
+    return SyncConversation(
+        handler_registry=mock_handler_registry,
+        message_repo=mock_message_repo,
+        session_repo=mock_session_repo,
+        agent_repo=mock_agent_repo,
+    )
+
+
+class TestSyncConversation:
+    """Test cases for SyncConversation."""
+
+    @pytest.mark.asyncio
+    async def test_send_and_wait_success(
+        self,
+        sync_conversation,
+        mock_agent_repo,
+        mock_session_repo,
+        mock_message_repo,
+        mock_handler_registry,
+    ):
+        """Test successful send_and_wait conversation."""
+        # Setup mock agents
+        sender = Agent(
+            id=uuid4(),
+            external_id="alice",
+            organization_id=uuid4(),
+            name="Alice",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+        recipient = Agent(
+            id=uuid4(),
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        # Setup mock session
+        session_id = uuid4()
+        session = Session(
+            id=session_id,
+            agent_a_id=sender.id,
+            agent_b_id=recipient.id,
+            session_type=SessionType.SYNC,
+            status=SessionStatus.ACTIVE,
+            locked_agent_id=None,
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+            ended_at=None,
+        )
+
+        mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[sender, recipient])
+        mock_session_repo.get_active_session = AsyncMock(return_value=None)
+        mock_session_repo.create = AsyncMock(return_value=session_id)
+        mock_session_repo.get_by_id = AsyncMock(return_value=session)
+        mock_session_repo.set_locked_agent = AsyncMock()
+        mock_message_repo.create = AsyncMock(return_value=uuid4())
+        mock_message_repo.pool = MagicMock()
+        mock_message_repo.pool.acquire = AsyncMock()
+
+        # Mock the lock context manager
+        lock_mock = AsyncMock()
+        lock_mock.__aenter__ = AsyncMock(return_value=True)
+        lock_mock.__aexit__ = AsyncMock(return_value=None)
+        mock_message_repo.pool.acquire.return_value.__aenter__ = AsyncMock(return_value=lock_mock)
+        mock_message_repo.pool.acquire.return_value.__aexit__ = AsyncMock()
+
+        # Setup response
+        response_message = {"reply": "Hello back!"}
+        sync_conversation._waiting_responses[session_id] = response_message
+
+        # Send and wait
+        response = await sync_conversation.send_and_wait(
+            "alice", "bob", {"text": "Hello!"}, timeout=5.0
+        )
+
+        # Verify response
+        assert response == response_message
+
+        # Verify session was created
+        mock_session_repo.create.assert_called_once_with(sender.id, recipient.id, SessionType.SYNC)
+
+        # Verify message was created
+        mock_message_repo.create.assert_called_once()
+
+        # Verify handler was invoked
+        mock_handler_registry.invoke_handler_async.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_send_and_wait_timeout(
+        self,
+        sync_conversation,
+        mock_agent_repo,
+        mock_session_repo,
+        mock_message_repo,
+        mock_handler_registry,
+    ):
+        """Test send_and_wait with timeout."""
+        # Setup mock agents
+        sender = Agent(
+            id=uuid4(),
+            external_id="alice",
+            organization_id=uuid4(),
+            name="Alice",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+        recipient = Agent(
+            id=uuid4(),
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        # Setup mock session
+        session_id = uuid4()
+        session = Session(
+            id=session_id,
+            agent_a_id=sender.id,
+            agent_b_id=recipient.id,
+            session_type=SessionType.SYNC,
+            status=SessionStatus.ACTIVE,
+            locked_agent_id=None,
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+            ended_at=None,
+        )
+
+        mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[sender, recipient])
+        mock_session_repo.get_active_session = AsyncMock(return_value=None)
+        mock_session_repo.create = AsyncMock(return_value=session_id)
+        mock_session_repo.get_by_id = AsyncMock(return_value=session)
+        mock_session_repo.set_locked_agent = AsyncMock()
+        mock_message_repo.create = AsyncMock(return_value=uuid4())
+        mock_message_repo.pool = MagicMock()
+        mock_message_repo.pool.acquire = AsyncMock()
+
+        # Mock the lock context manager
+        lock_mock = AsyncMock()
+        lock_mock.__aenter__ = AsyncMock(return_value=True)
+        lock_mock.__aexit__ = AsyncMock(return_value=None)
+        mock_message_repo.pool.acquire.return_value.__aenter__ = AsyncMock(return_value=lock_mock)
+        mock_message_repo.pool.acquire.return_value.__aexit__ = AsyncMock()
+
+        # Send and wait (should timeout since no response is set)
+        with pytest.raises(TimeoutError, match="No response received within 1.0 seconds"):
+            await sync_conversation.send_and_wait("alice", "bob", {"text": "Hello!"}, timeout=1.0)
+
+    @pytest.mark.asyncio
+    async def test_reply_success(self, sync_conversation, mock_agent_repo, mock_session_repo):
+        """Test successful reply to conversation."""
+        # Setup mock agents
+        responder = Agent(
+            id=uuid4(),
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        # Setup mock session
+        session_id = uuid4()
+        session = Session(
+            id=session_id,
+            agent_a_id=uuid4(),
+            agent_b_id=responder.id,
+            session_type=SessionType.SYNC,
+            status=SessionStatus.ACTIVE,
+            locked_agent_id=None,
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+            ended_at=None,
+        )
+
+        mock_agent_repo.get_by_external_id = AsyncMock(return_value=responder)
+        mock_session_repo.get_by_id = AsyncMock(return_value=session)
+
+        # Setup waiting event
+        event = AsyncMock()
+        sync_conversation._waiting_events[session_id] = event
+
+        # Reply
+        await sync_conversation.reply(session_id, "bob", {"reply": "Hello back!"})
+
+        # Verify response was stored
+        assert session_id in sync_conversation._waiting_responses
+        assert sync_conversation._waiting_responses[session_id] == {"reply": "Hello back!"}
+
+        # Verify event was set
+        event.set.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_end_conversation_success(
+        self,
+        sync_conversation,
+        mock_agent_repo,
+        mock_session_repo,
+        mock_message_repo,
+        mock_handler_registry,
+    ):
+        """Test successful conversation ending."""
+        # Setup mock agents
+        agent1 = Agent(
+            id=uuid4(),
+            external_id="alice",
+            organization_id=uuid4(),
+            name="Alice",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+        agent2 = Agent(
+            id=uuid4(),
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        # Setup mock session
+        session_id = uuid4()
+        session = Session(
+            id=session_id,
+            agent_a_id=agent1.id,
+            agent_b_id=agent2.id,
+            session_type=SessionType.SYNC,
+            status=SessionStatus.ACTIVE,
+            locked_agent_id=None,
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+            ended_at=None,
+        )
+
+        mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[agent1, agent2])
+        mock_session_repo.get_active_session = AsyncMock(return_value=session)
+        mock_session_repo.end_session = AsyncMock()
+        mock_handler_registry.has_handler = MagicMock(return_value=True)
+        mock_message_repo.create = AsyncMock(return_value=uuid4())
+
+        # End conversation
+        await sync_conversation.end_conversation("alice", "bob")
+
+        # Verify session was ended
+        mock_session_repo.end_session.assert_called_once_with(session_id)
+
+        # Verify ending messages were sent
+        assert mock_message_repo.create.call_count == 2  # One for each agent
+
+    def test_serialize_content_dict(self, sync_conversation):
+        """Test content serialization for dict input."""
+        result = sync_conversation._serialize_content({"text": "Hello!"})
+        assert result == {"text": "Hello!"}
+
+    def test_serialize_content_pydantic(self, sync_conversation):
+        """Test content serialization for Pydantic model input."""
+        from pydantic import BaseModel
+
+        class TestMessage(BaseModel):
+            text: str
+            number: int
+
+        message = TestMessage(text="Hello!", number=42)
+        result = sync_conversation._serialize_content(message)
+        assert result == {"text": "Hello!", "number": 42}
+
+    def test_serialize_content_other(self, sync_conversation):
+        """Test content serialization for other types."""
+        result = sync_conversation._serialize_content("plain string")
         assert result == {"data": "plain string"}

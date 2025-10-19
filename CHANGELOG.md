@@ -16,6 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Main SDK client class
   - Pydantic models and exceptions
   - Database schema with 7 tables and 42+ indexes
+- Phase 2: One-Way Messaging implementation
+  - OneWayMessenger class with send() method
+  - Message validation and persistence
+  - Asynchronous handler invocation
+  - SDK integration with one_way property
+  - Comprehensive unit tests (7/7 passing)
+- Phase 3: Synchronous Conversations implementation
+  - Advisory locks utility for PostgreSQL coordination
+  - SyncConversation class with send_and_wait() method
+  - Blocking communication with timeout handling
+  - Session management with agent ordering
+  - Reply mechanism for recipient responses
+  - End conversation functionality
+  - SDK integration with sync_conversation property
 
 ### Changed
 

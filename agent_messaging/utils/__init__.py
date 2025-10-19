@@ -1,4 +1,6 @@
 # Utilities for Agent Messaging Protocol
-# Will contain lock utilities, timeout helpers, and other utilities
+# Contains lock utilities, timeout helpers, and other utilities
 
-__all__ = []
+from .locks import AdvisoryLock, SessionLock
+
+__all__ = ["AdvisoryLock", "SessionLock"]

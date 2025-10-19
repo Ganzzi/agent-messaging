@@ -16,6 +16,7 @@ from .exceptions import (
 )
 from .handlers.registry import HandlerRegistry
 from .messaging.one_way import OneWayMessenger
+from .messaging.sync_conversation import SyncConversation
 from .models import CreateAgentRequest, CreateOrganizationRequest
 
 logger = logging.getLogger(__name__)
@@ -279,5 +280,17 @@ class AgentMessaging(Generic[T]):
         return OneWayMessenger[T](
             handler_registry=self._handler_registry,
             message_repo=self._message_repo,
+            agent_repo=self._agent_repo,
+        )
+
+    @property
+    def sync_conversation(self) -> "SyncConversation[T]":
+        """Get synchronous conversation messenger for request-response messaging."""
+        from .messaging.sync_conversation import SyncConversation
+
+        return SyncConversation[T](
+            handler_registry=self._handler_registry,
+            message_repo=self._message_repo,
+            session_repo=self._session_repo,
             agent_repo=self._agent_repo,
         )

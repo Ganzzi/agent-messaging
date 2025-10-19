@@ -17,12 +17,13 @@ from .exceptions import (
     MeetingNotFoundError,
     TimeoutError,
 )
-from .messaging import OneWayMessenger
+from .messaging import OneWayMessenger, SyncConversation
 
 __all__ = [
     "AgentMessaging",
     "Config",
     "OneWayMessenger",
+    "SyncConversation",
     "AgentMessagingError",
     "AgentNotFoundError",
     "OrganizationNotFoundError",
