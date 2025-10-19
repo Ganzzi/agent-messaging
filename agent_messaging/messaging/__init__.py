@@ -1,4 +1,5 @@
 # Messaging classes for Agent Messaging Protocol
-# Will contain OneWayMessenger, SyncConversation, AsyncConversation, MeetingManager
 
-__all__ = []
+from .one_way import OneWayMessenger
+
+__all__ = ["OneWayMessenger"]

@@ -15,6 +15,7 @@ from .exceptions import (
     OrganizationNotFoundError,
 )
 from .handlers.registry import HandlerRegistry
+from .messaging.one_way import OneWayMessenger
 from .models import CreateAgentRequest, CreateOrganizationRequest
 
 logger = logging.getLogger(__name__)
@@ -267,3 +268,16 @@ class AgentMessaging(Generic[T]):
     def handler_registry(self) -> HandlerRegistry:
         """Get handler registry."""
         return self._handler_registry
+
+    # ========================================================================
+    # Messaging Properties
+    # ========================================================================
+
+    @property
+    def one_way(self) -> OneWayMessenger[T]:
+        """Get one-way messenger for fire-and-forget messaging."""
+        return OneWayMessenger[T](
+            handler_registry=self._handler_registry,
+            message_repo=self._message_repo,
+            agent_repo=self._agent_repo,
+        )
