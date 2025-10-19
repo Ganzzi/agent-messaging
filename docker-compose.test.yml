@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for Testing
+  postgres_test:
+    image: tensorchord/vchord-suite:pg16-latest
+    container_name: agent_messaging_postgres_test
+    restart: no  # Don't restart for tests
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-agent_messaging_test}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"  # Different port to avoid conflicts
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro  # Run schema on startup
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-agent_messaging_test}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - agent_messaging_test_network
+    # Override default command to ensure schema is loaded
+    command: >
+      sh -c "
+        docker-entrypoint.sh postgres &
+        until pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-agent_messaging_test}; do
+          echo 'Waiting for PostgreSQL to be ready...'
+          sleep 2
+        done
+        echo 'PostgreSQL is ready for tests'
+        wait
+      "
+
+volumes:
+  postgres_test_data:
+    driver: local
+
+networks:
+  agent_messaging_test_network:
+    driver: bridge

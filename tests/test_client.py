@@ -82,12 +82,32 @@ def mock_repos(mock_org_repo, mock_agent_repo):
     }
 
 
+@pytest.fixture
+def mock_registry():
+    """Mock handler registry."""
+    registry = MagicMock()
+    registry.register = MagicMock(
+        return_value=lambda func: func
+    )  # Return a decorator that just returns the function
+    registry.has_handler = MagicMock(return_value=True)
+    registry.shutdown = AsyncMock()
+    return registry
+
+
+@pytest.fixture
+def mock_event_handler():
+    """Mock event handler."""
+    handler = MagicMock()
+    handler.register_handler = MagicMock()
+    return handler
+
+
 class TestAgentMessagingSDK:
     """Integration tests for AgentMessaging SDK."""
 
     @pytest.mark.asyncio
     async def test_sdk_initialization_and_context_manager(
-        self, mock_config, mock_db_manager, mock_repos
+        self, mock_config, mock_db_manager, mock_repos, mock_registry, mock_event_handler
     ):
         """Test SDK initialization and context manager behavior."""
         with (
@@ -105,6 +125,8 @@ class TestAgentMessagingSDK:
             patch(
                 "agent_messaging.client.MeetingRepository", return_value=mock_repos["meeting_repo"]
             ),
+            patch("agent_messaging.client.HandlerRegistry", return_value=mock_registry),
+            patch("agent_messaging.client.MeetingEventHandler", return_value=mock_event_handler),
         ):
 
             sdk = AgentMessaging[dict](mock_config)
@@ -306,7 +328,7 @@ class TestAgentMessagingSDK:
                     await sdk.get_agent("nonexistent_agent")
 
     @pytest.mark.asyncio
-    async def test_register_handler(self, mock_config, mock_db_manager, mock_repos):
+    async def test_register_handler(self, mock_config, mock_db_manager, mock_repos, mock_registry):
         """Test message handler registration."""
         with (
             patch("agent_messaging.client.PostgreSQLManager", return_value=mock_db_manager),
@@ -323,6 +345,7 @@ class TestAgentMessagingSDK:
             patch(
                 "agent_messaging.client.MeetingRepository", return_value=mock_repos["meeting_repo"]
             ),
+            patch("agent_messaging.client.HandlerRegistry", return_value=mock_registry),
         ):
 
             async with AgentMessaging[dict](mock_config) as sdk:
@@ -332,10 +355,12 @@ class TestAgentMessagingSDK:
                     return {"response": "ok"}
 
                 # Verify handler registry was called
-                sdk._handler_registry.register.assert_called_once_with("test_agent")
+                mock_registry.register.assert_called_once_with("test_agent")
 
     @pytest.mark.asyncio
-    async def test_register_event_handler(self, mock_config, mock_db_manager, mock_repos):
+    async def test_register_event_handler(
+        self, mock_config, mock_db_manager, mock_repos, mock_event_handler
+    ):
         """Test event handler registration."""
         with (
             patch("agent_messaging.client.PostgreSQLManager", return_value=mock_db_manager),
@@ -352,6 +377,7 @@ class TestAgentMessagingSDK:
             patch(
                 "agent_messaging.client.MeetingRepository", return_value=mock_repos["meeting_repo"]
             ),
+            patch("agent_messaging.client.MeetingEventHandler", return_value=mock_event_handler),
         ):
 
             async with AgentMessaging[dict](mock_config) as sdk:
@@ -361,12 +387,14 @@ class TestAgentMessagingSDK:
                     print(f"Meeting started: {event.meeting_id}")
 
                 # Verify event handler was registered
-                sdk._event_handler.register_handler.assert_called_once_with(
+                mock_event_handler.register_handler.assert_called_once_with(
                     MeetingEventType.MEETING_STARTED, on_meeting_started
                 )
 
     @pytest.mark.asyncio
-    async def test_has_handler(self, mock_config, mock_db_manager, mock_repos):
+    async def test_has_handler(
+        self, mock_config, mock_db_manager, mock_repos, mock_handler_registry
+    ):
         """Test handler existence check."""
         with (
             patch("agent_messaging.client.PostgreSQLManager", return_value=mock_db_manager),
@@ -383,11 +411,12 @@ class TestAgentMessagingSDK:
             patch(
                 "agent_messaging.client.MeetingRepository", return_value=mock_repos["meeting_repo"]
             ),
+            patch("agent_messaging.client.HandlerRegistry", return_value=mock_handler_registry),
         ):
 
             async with AgentMessaging[dict](mock_config) as sdk:
                 result = sdk.has_handler("test_agent")
-                sdk._handler_registry.has_handler.assert_called_once_with("test_agent")
+                mock_handler_registry.has_handler.assert_called_once_with("test_agent")
 
     @pytest.mark.asyncio
     async def test_messaging_properties(self, mock_config, mock_db_manager, mock_repos):
@@ -446,7 +475,9 @@ class TestAgentMessagingSDK:
             await sdk.get_agent("agent")
 
     @pytest.mark.asyncio
-    async def test_repository_properties(self, mock_config, mock_db_manager, mock_repos):
+    async def test_repository_properties(
+        self, mock_config, mock_db_manager, mock_repos, mock_handler_registry
+    ):
         """Test repository property access."""
         with (
             patch("agent_messaging.client.PostgreSQLManager", return_value=mock_db_manager),
@@ -463,6 +494,7 @@ class TestAgentMessagingSDK:
             patch(
                 "agent_messaging.client.MeetingRepository", return_value=mock_repos["meeting_repo"]
             ),
+            patch("agent_messaging.client.HandlerRegistry", return_value=mock_handler_registry),
         ):
 
             async with AgentMessaging[dict](mock_config) as sdk:

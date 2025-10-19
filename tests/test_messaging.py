@@ -1,5 +1,6 @@
 """Unit tests for messaging classes."""
 
+import asyncio
 import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -266,10 +267,10 @@ class TestSyncConversation:
 
         # Mock the pool.acquire context manager
         mock_connection = AsyncMock()
-        mock_pool_cm = AsyncMock()
+        mock_pool_cm = MagicMock()
         mock_pool_cm.__aenter__ = AsyncMock(return_value=mock_connection)
         mock_pool_cm.__aexit__ = AsyncMock(return_value=None)
-        mock_message_repo.pool.acquire = AsyncMock(return_value=mock_pool_cm)
+        mock_message_repo.pool.acquire = MagicMock(return_value=mock_pool_cm)
 
         # Mock session lock
         with patch(
@@ -282,6 +283,13 @@ class TestSyncConversation:
             # Setup response
             response_message = {"reply": "Hello back!"}
             sync_conversation._waiting_responses[session_id] = response_message
+
+            # Mock asyncio.wait_for to return immediately (simulating event being set)
+            with patch(
+                "agent_messaging.messaging.sync_conversation.asyncio.wait_for",
+                new_callable=AsyncMock,
+            ) as mock_wait_for:
+                mock_wait_for.return_value = None  # Return immediately
 
             # Send and wait
             response = await sync_conversation.send_and_wait(
@@ -353,10 +361,10 @@ class TestSyncConversation:
 
         # Mock the pool.acquire context manager
         mock_connection = AsyncMock()
-        mock_pool_cm = AsyncMock()
+        mock_pool_cm = MagicMock()
         mock_pool_cm.__aenter__ = AsyncMock(return_value=mock_connection)
         mock_pool_cm.__aexit__ = AsyncMock(return_value=None)
-        mock_message_repo.pool.acquire = AsyncMock(return_value=mock_pool_cm)
+        mock_message_repo.pool.acquire = MagicMock(return_value=mock_pool_cm)
 
         # Mock session lock
         with patch(
