@@ -44,7 +44,7 @@ class TestOrganizationRepository:
         # Verify the call
         assert org_id == mock_result["id"]
         org_repo._fetch_one.assert_called_once_with(
-            "INSERT INTO organizations (external_id, name)\n            VALUES ($1, $2)\n            RETURNING id\n        ",
+            "\n            INSERT INTO organizations (external_id, name)\n            VALUES ($1, $2)\n            RETURNING id\n        ",
             ["org_001", "Test Organization"],
         )
 
@@ -110,7 +110,7 @@ class TestAgentRepository:
 
         assert agent_id == mock_result["id"]
         agent_repo._fetch_one.assert_called_once_with(
-            "INSERT INTO agents (external_id, organization_id, name)\n            VALUES ($1, $2, $3)\n            RETURNING id\n        ",
+            "\n            INSERT INTO agents (external_id, organization_id, name)\n            VALUES ($1, $2, $3)\n            RETURNING id\n        ",
             ["alice", str(org_id), "Alice Agent"],
         )
 

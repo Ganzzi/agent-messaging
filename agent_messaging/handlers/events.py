@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any, Callable, Dict, List
 from uuid import UUID
 
@@ -72,6 +73,7 @@ class MeetingEventHandler:
         payload = MeetingEventPayload(
             meeting_id=meeting_id,
             event_type=event_type,
+            timestamp=datetime.now(),
             data=data,
         )
 

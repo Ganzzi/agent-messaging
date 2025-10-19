@@ -15,6 +15,7 @@ from .exceptions import (
     OrganizationNotFoundError,
 )
 from .handlers.registry import HandlerRegistry
+from .handlers.events import MeetingEventHandler, MeetingEventType
 from .messaging.one_way import OneWayMessenger
 from .messaging.sync_conversation import SyncConversation
 from .messaging.async_conversation import AsyncConversation
@@ -53,6 +54,7 @@ class AgentMessaging(Generic[T]):
         self.config = config or Config()
         self._db_manager = PostgreSQLManager(self.config.database)
         self._handler_registry = HandlerRegistry(self.config.messaging.handler_timeout)
+        self._event_handler = MeetingEventHandler()
 
         # Repositories (initialized in __aenter__)
         self._org_repo: Optional[OrganizationRepository] = None
@@ -228,6 +230,30 @@ class AgentMessaging(Generic[T]):
         """
         return self._handler_registry.has_handler(agent_external_id)
 
+    def register_event_handler(self, event_type: MeetingEventType):
+        """Register an event handler for meeting events.
+
+        This decorator registers an async function to handle meeting events.
+
+        Args:
+            event_type: Type of meeting event to handle
+
+        Returns:
+            Decorator function
+
+        Example:
+            @sdk.register_event_handler(MeetingEvent.TURN_CHANGED)
+            async def on_turn_changed(event: MeetingEventPayload):
+                print(f"Turn changed in meeting {event.meeting_id}")
+        """
+
+        def decorator(handler):
+            self._event_handler.register_handler(event_type, handler)
+            logger.info(f"Registered event handler for: {event_type}")
+            return handler
+
+        return decorator
+
     # ========================================================================
     # Properties for Messaging Classes
     # ========================================================================
@@ -318,4 +344,5 @@ class AgentMessaging(Generic[T]):
             meeting_repo=self._meeting_repo,
             message_repo=self._message_repo,
             agent_repo=self._agent_repo,
+            event_handler=self._event_handler,
         )

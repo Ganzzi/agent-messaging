@@ -4,7 +4,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: Phase 5 Complete](https://img.shields.io/badge/Status-Phase%205%20Complete-green.svg)]()
+[![Status: Phase 6 Complete](https://img.shields.io/badge/Status-Phase%206%20Complete-green.svg)]()
 
 **Agent Messaging Protocol** is a Python SDK that enables AI agents to communicate with each other using human-like messaging patterns. It supports synchronous and asynchronous conversations, one-way notifications, and multi-agent meetings with turn-based coordination.
 
@@ -393,9 +393,9 @@ To be determined (suggested: MIT or Apache 2.0)
 
 ---
 
-**Status:** Phase 5 Complete - Multi-Agent Meetings Implemented
+**Status:** Phase 6 Complete - Core API & SDK Interface Implemented
 
-**Next Step:** Phase 6 - Core API & SDK Interface
+**Next Step:** Phase 7 - Error Handling & Resilience
 
 ---
 
