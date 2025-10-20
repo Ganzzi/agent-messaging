@@ -4,8 +4,7 @@
 
 - [AgentMessaging Class](#agentmessaging-class)
 - [OneWayMessenger](#onewaymessenger)
-- [SyncConversation](#syncconversation)
-- [AsyncConversation](#asyncconversation)
+- [Conversation](#conversation)
 - [MeetingManager](#meetingmanager)
 - [Exceptions](#exceptions)
 - [Models](#models)
@@ -106,13 +105,10 @@ Get agent by external ID.
 ### Handler Registration
 
 ```python
-def register_handler(agent_external_id: str) -> Callable
+def register_handler() -> Callable
 ```
 
-Decorator to register message handler for an agent.
-
-**Parameters:**
-- `agent_external_id` (str): Agent external ID
+Decorator to register message handler (shared across all agents).
 
 **Returns:** Decorator function
 
@@ -121,6 +117,9 @@ Decorator to register message handler for an agent.
 async def handler(message: T, context: MessageContext) -> Optional[T]:
     pass
 ```
+
+**Note:** Phase 10 change - handlers are now registered globally and shared by all agents,
+rather than being registered per-agent. The handler receives the agent context in MessageContext.
 
 ```python
 def register_event_handler(event_type: MeetingEventType) -> Callable
@@ -140,13 +139,10 @@ async def handler(event: MeetingEventPayload) -> None:
 ```
 
 ```python
-def has_handler(agent_external_id: str) -> bool
+def has_handler() -> bool
 ```
 
-Check if agent has registered handler.
-
-**Parameters:**
-- `agent_external_id` (str): Agent external ID
+Check if handler is registered.
 
 **Returns:** True if handler registered
 
@@ -161,17 +157,10 @@ One-way messaging interface.
 
 ```python
 @property
-def sync_conversation(self) -> SyncConversation[T]
+def conversation(self) -> Conversation[T]
 ```
 
-Synchronous conversation interface.
-
-```python
-@property
-def async_conversation(self) -> AsyncConversation[T]
-```
-
-Asynchronous conversation interface.
+Unified conversation interface (sync and async patterns).
 
 ```python
 @property
@@ -184,7 +173,7 @@ Meeting management interface.
 
 ## OneWayMessenger
 
-Fire-and-forget messaging for notifications.
+Fire-and-forget messaging for one-to-many notifications.
 
 ### Constructor
 
@@ -200,33 +189,36 @@ OneWayMessenger[T](
 
 ```python
 async def send(
-    from_agent_id: str,
-    to_agent_id: str,
+    sender_external_id: str,
+    recipient_external_ids: List[str],
     message: T
-) -> UUID
+) -> List[str]
 ```
 
-Send one-way message.
+Send one-way message to multiple recipients (broadcast).
 
 **Parameters:**
-- `from_agent_id` (str): Sender external ID
-- `to_agent_id` (str): Recipient external ID
+- `sender_external_id` (str): Sender external ID
+- `recipient_external_ids` (List[str]): List of recipient external IDs
 - `message` (T): Message content
 
-**Returns:** Message UUID
+**Returns:** List of message UUIDs (one per recipient)
 
 **Raises:** AgentNotFoundError, NoHandlerRegisteredError
 
+**Phase 10 Change:** Updated to support one-to-many pattern. Handlers are invoked
+concurrently for all recipients.
+
 ---
 
-## SyncConversation
+## Conversation
 
-Blocking request-response conversations.
+Unified conversation class supporting both sync and async messaging patterns.
 
 ### Constructor
 
 ```python
-SyncConversation[T](
+Conversation[T](
     handler_registry: HandlerRegistry,
     message_repo: MessageRepository,
     session_repo: SessionRepository,
@@ -245,136 +237,100 @@ async def send_and_wait(
 ) -> T
 ```
 
-Send message and wait for response.
+Send message and block until response (synchronous pattern).
 
 **Parameters:**
 - `sender_external_id` (str): Sender external ID
 - `recipient_external_id` (str): Recipient external ID
 - `message` (T): Request message
-- `timeout` (float): Max wait time in seconds
+- `timeout` (float): Max wait time in seconds (default: 30.0)
 
 **Returns:** Response message
 
-**Raises:** AgentNotFoundError, NoHandlerRegisteredError, TimeoutError
+**Raises:** AgentNotFoundError, NoHandlerRegisteredError, TimeoutError, SessionStateError
 
 ```python
-async def reply(
-    session_id: UUID,
-    responder_external_id: str,
-    message: T
-) -> None
-```
-
-Reply to synchronous conversation.
-
-**Parameters:**
-- `session_id` (UUID): Session UUID from MessageContext
-- `responder_external_id` (str): Responder external ID
-- `message` (T): Response message
-
-**Raises:** RuntimeError, SessionStateError, AgentNotFoundError
-
-```python
-async def end_conversation(
-    agent_external_id: str,
-    other_agent_external_id: str
-) -> None
-```
-
-End conversation between two agents.
-
-**Parameters:**
-- `agent_external_id` (str): One agent external ID
-- `other_agent_external_id` (str): Other agent external ID
-
-**Raises:** ValueError, AgentNotFoundError, RuntimeError
-
----
-
-## AsyncConversation
-
-Non-blocking message queues.
-
-### Constructor
-
-```python
-AsyncConversation[T](
-    handler_registry: HandlerRegistry,
-    message_repo: MessageRepository,
-    session_repo: SessionRepository,
-    agent_repo: AgentRepository
-)
-```
-
-### Methods
-
-```python
-async def send(
+async def send_no_wait(
     sender_external_id: str,
     recipient_external_id: str,
     message: T
-) -> UUID
+) -> None
 ```
 
-Send message asynchronously.
+Send message without blocking (asynchronous pattern).
 
 **Parameters:**
 - `sender_external_id` (str): Sender external ID
 - `recipient_external_id` (str): Recipient external ID
 - `message` (T): Message content
 
-**Returns:** Conversation UUID
-
 **Raises:** AgentNotFoundError
 
 ```python
-async def get_unread_messages(agent_external_id: str) -> List[T]
+async def get_unread_messages(
+    agent_external_id: str
+) -> List[T]
 ```
 
-Get unread messages for agent.
+Get all unread messages for an agent.
 
 **Parameters:**
 - `agent_external_id` (str): Agent external ID
 
-**Returns:** List of message contents
+**Returns:** List of unread messages
 
 **Raises:** AgentNotFoundError
 
 ```python
-async def get_messages_from_agent(
-    recipient_external_id: str,
-    sender_external_id: str
-) -> List[T]
-```
-
-Get messages from specific sender.
-
-**Parameters:**
-- `recipient_external_id` (str): Recipient external ID
-- `sender_external_id` (str): Sender external ID
-
-**Returns:** List of message contents
-
-**Raises:** AgentNotFoundError
-
-```python
-async def wait_for_message(
-    recipient_external_id: str,
-    sender_external_id: str,
-    timeout: float = 30.0
+async def get_or_wait_for_response(
+    agent_external_id: str,
+    other_agent_external_id: str,
+    timeout: Optional[float] = None
 ) -> Optional[T]
 ```
 
-Wait for message from specific sender.
+Check for messages from specific agent, wait if none available.
 
 **Parameters:**
-- `recipient_external_id` (str): Recipient external ID
-- `sender_external_id` (str): Sender external ID
-- `timeout` (float): Max wait time in seconds
+- `agent_external_id` (str): Receiving agent external ID
+- `other_agent_external_id` (str): Sending agent external ID
+- `timeout` (Optional[float]): Max wait time (None = wait forever)
 
 **Returns:** Message content or None if timeout
 
+**Raises:** AgentNotFoundError, TimeoutError
+
+```python
+async def end_conversation(
+    agent_a_external_id: str,
+    agent_b_external_id: str
+) -> None
+```
+
+End conversation between two agents.
+
+**Parameters:**
+- `agent_a_external_id` (str): First agent external ID
+- `agent_b_external_id` (str): Second agent external ID
+
+**Raises:** ValueError, AgentNotFoundError, RuntimeError
+
+```python
+async def resume_agent_handler(
+    agent_external_id: str
+) -> None
+```
+
+Resume agent handler for system recovery (process unread messages).
+
+**Parameters:**
+- `agent_external_id` (str): Agent external ID
+
 **Raises:** AgentNotFoundError
+
+**Phase 10 Change:** Unified SyncConversation and AsyncConversation into single
+Conversation class. Sessions intelligently handle both blocking waits and message
+queues based on the method called.
 
 ---
 

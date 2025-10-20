@@ -51,7 +51,7 @@ class TestEnums:
     def test_session_type_enum(self):
         """Test SessionType enum values."""
         assert SessionType.SYNC == "sync"
-        assert SessionType.ASYNC == "async"
+        # ASYNC removed - sessions are now unified
 
     def test_session_status_enum(self):
         """Test SessionStatus enum values."""
@@ -143,7 +143,6 @@ class TestCoreModels:
             id=session_id,
             agent_a_id=agent_a_id,
             agent_b_id=agent_b_id,
-            session_type=SessionType.SYNC,
             status=SessionStatus.ACTIVE,
             locked_agent_id=None,
             created_at=created_at,
@@ -154,7 +153,6 @@ class TestCoreModels:
         assert session.id == session_id
         assert session.agent_a_id == agent_a_id
         assert session.agent_b_id == agent_b_id
-        assert session.session_type == SessionType.SYNC
         assert session.status == SessionStatus.ACTIVE
         assert session.locked_agent_id is None
         assert session.created_at == created_at
@@ -167,7 +165,6 @@ class TestCoreModels:
             id=uuid4(),
             agent_a_id=uuid4(),
             agent_b_id=uuid4(),
-            session_type=SessionType.ASYNC,
             status=SessionStatus.WAITING,
             locked_agent_id=uuid4(),
             created_at=datetime.now(),
@@ -600,14 +597,12 @@ class TestModelSerialization:
             id=uuid4(),
             agent_a_id=uuid4(),
             agent_b_id=uuid4(),
-            session_type=SessionType.SYNC,
             status=SessionStatus.ACTIVE,
             created_at=datetime.now(),
             updated_at=datetime.now(),
         )
 
         data = session.model_dump()
-        assert data["session_type"] == "sync"
         assert data["status"] == "active"
 
     def test_uuid_serialization(self):

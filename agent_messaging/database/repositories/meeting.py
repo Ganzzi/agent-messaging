@@ -32,9 +32,12 @@ class MeetingRepository(BaseRepository):
         interval_str = f"{turn_duration} seconds" if turn_duration else None
         result = await self._fetch_one(
             query,
-            [str(host_id), MeetingStatus.CREATED.value, interval_str],
+            [host_id, MeetingStatus.CREATED.value, interval_str],
         )
-        return result["id"]
+        meeting_id = result["id"]
+        if isinstance(meeting_id, str):
+            meeting_id = UUID(meeting_id)
+        return meeting_id
 
     async def get_by_id(self, meeting_id: UUID) -> Optional[Meeting]:
         """Get meeting by ID.
@@ -51,7 +54,7 @@ class MeetingRepository(BaseRepository):
             FROM meetings
             WHERE id = $1
         """
-        result = await self._fetch_one(query, [str(meeting_id)])
+        result = await self._fetch_one(query, [meeting_id])
         return self._meeting_from_db(result) if result else None
 
     async def update_status(self, meeting_id: UUID, status: MeetingStatus) -> None:
@@ -66,7 +69,7 @@ class MeetingRepository(BaseRepository):
             SET status = $1
             WHERE id = $2
         """
-        await self._execute(query, [status.value, str(meeting_id)])
+        await self._execute(query, [status.value, meeting_id])
 
     async def start_meeting(self, meeting_id: UUID) -> None:
         """Mark meeting as started.
@@ -79,7 +82,7 @@ class MeetingRepository(BaseRepository):
             SET status = $1, started_at = CURRENT_TIMESTAMP
             WHERE id = $2
         """
-        await self._execute(query, [MeetingStatus.ACTIVE.value, str(meeting_id)])
+        await self._execute(query, [MeetingStatus.ACTIVE.value, meeting_id])
 
     async def end_meeting(self, meeting_id: UUID) -> None:
         """End a meeting.
@@ -92,7 +95,7 @@ class MeetingRepository(BaseRepository):
             SET status = $1, ended_at = CURRENT_TIMESTAMP
             WHERE id = $2
         """
-        await self._execute(query, [MeetingStatus.ENDED.value, str(meeting_id)])
+        await self._execute(query, [MeetingStatus.ENDED.value, meeting_id])
 
     async def set_current_speaker(
         self,
@@ -115,7 +118,7 @@ class MeetingRepository(BaseRepository):
         """
         await self._execute(
             query,
-            [str(agent_id) if agent_id else None, turn_started, str(meeting_id)],
+            [agent_id if agent_id else None, turn_started, meeting_id],
         )
 
     async def add_participant(
@@ -141,9 +144,12 @@ class MeetingRepository(BaseRepository):
         """
         result = await self._fetch_one(
             query,
-            [str(meeting_id), str(agent_id), ParticipantStatus.INVITED.value, join_order],
+            [meeting_id, agent_id, ParticipantStatus.INVITED.value, join_order],
         )
-        return result["id"]
+        participant_id = result["id"]
+        if isinstance(participant_id, str):
+            participant_id = UUID(participant_id)
+        return participant_id
 
     async def update_participant_status(
         self,
@@ -161,7 +167,7 @@ class MeetingRepository(BaseRepository):
             SET status = $1
             WHERE id = $2
         """
-        await self._execute(query, [status.value, str(participant_id)])
+        await self._execute(query, [status.value, participant_id])
 
     async def get_participants(self, meeting_id: UUID) -> List[MeetingParticipant]:
         """Get all participants for a meeting.
@@ -179,7 +185,7 @@ class MeetingRepository(BaseRepository):
             WHERE meeting_id = $1
             ORDER BY join_order
         """
-        results = await self._fetch_all(query, [str(meeting_id)])
+        results = await self._fetch_all(query, [meeting_id])
         return [self._participant_from_db(result) for result in results]
 
     async def get_participant(
@@ -202,7 +208,7 @@ class MeetingRepository(BaseRepository):
             FROM meeting_participants
             WHERE meeting_id = $1 AND agent_id = $2
         """
-        result = await self._fetch_one(query, [str(meeting_id), str(agent_id)])
+        result = await self._fetch_one(query, [meeting_id, agent_id])
         return self._participant_from_db(result) if result else None
 
     def _meeting_from_db(self, result: dict) -> Meeting:

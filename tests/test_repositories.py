@@ -35,14 +35,15 @@ class TestOrganizationRepository:
     async def test_create_organization(self, org_repo, mock_pool):
         """Test creating a new organization."""
         # Mock the database response
-        mock_result = {"id": str(uuid4())}
+        mock_id = uuid4()
+        mock_result = {"id": mock_id}
         org_repo._fetch_one = AsyncMock(return_value=mock_result)
 
         # Call the method
         org_id = await org_repo.create("org_001", "Test Organization")
 
-        # Verify the call
-        assert org_id == mock_result["id"]
+        # Verify the call - now returns UUID object
+        assert org_id == mock_id
         org_repo._fetch_one.assert_called_once_with(
             "\n            INSERT INTO organizations (external_id, name)\n            VALUES ($1, $2)\n            RETURNING id\n        ",
             ["org_001", "Test Organization"],
@@ -103,15 +104,16 @@ class TestAgentRepository:
     async def test_create_agent(self, agent_repo, mock_pool):
         """Test creating a new agent."""
         org_id = uuid4()
-        mock_result = {"id": str(uuid4())}
+        mock_agent_id = uuid4()
+        mock_result = {"id": mock_agent_id}
         agent_repo._fetch_one = AsyncMock(return_value=mock_result)
 
         agent_id = await agent_repo.create("alice", org_id, "Alice Agent")
 
-        assert agent_id == mock_result["id"]
+        assert agent_id == mock_agent_id
         agent_repo._fetch_one.assert_called_once_with(
             "\n            INSERT INTO agents (external_id, organization_id, name)\n            VALUES ($1, $2, $3)\n            RETURNING id\n        ",
-            ["alice", str(org_id), "Alice Agent"],
+            ["alice", org_id, "Alice Agent"],
         )
 
     @pytest.mark.asyncio

@@ -45,22 +45,26 @@ class MessageRepository(BaseRepository):
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
         """
-        content_json = json.dumps(content or {})
-        metadata_json = json.dumps(metadata) if metadata else None
+        # psqlpy expects dict/list for JSONB, not JSON strings
+        content_dict = content or {}
+        metadata_dict = metadata if metadata else None
 
         result = await self._fetch_one(
             query,
             [
-                str(sender_id),
-                str(recipient_id) if recipient_id else None,
-                str(session_id) if session_id else None,
-                str(meeting_id) if meeting_id else None,
+                sender_id,
+                recipient_id if recipient_id else None,
+                session_id if session_id else None,
+                meeting_id if meeting_id else None,
                 message_type.value,
-                content_json,
-                metadata_json,
+                content_dict,
+                metadata_dict,
             ],
         )
-        return result["id"]
+        message_id = result["id"]
+        if isinstance(message_id, str):
+            message_id = UUID(message_id)
+        return message_id
 
     async def get_by_id(self, message_id: UUID) -> Optional[Message]:
         """Get message by ID.
@@ -77,7 +81,7 @@ class MessageRepository(BaseRepository):
             FROM messages
             WHERE id = $1
         """
-        result = await self._fetch_one(query, [str(message_id)])
+        result = await self._fetch_one(query, [message_id])
         return self._message_from_db(result) if result else None
 
     async def get_messages_for_recipient(
@@ -106,7 +110,7 @@ class MessageRepository(BaseRepository):
         """
         results = await self._fetch_all(
             query,
-            [str(recipient_id), limit, offset],
+            [recipient_id, limit, offset],
         )
         return [self._message_from_db(result) for result in results]
 
@@ -132,7 +136,7 @@ class MessageRepository(BaseRepository):
             ORDER BY created_at ASC
             LIMIT $2
         """
-        results = await self._fetch_all(query, [str(session_id), limit])
+        results = await self._fetch_all(query, [session_id, limit])
         return [self._message_from_db(result) for result in results]
 
     async def get_messages_for_meeting(
@@ -157,7 +161,7 @@ class MessageRepository(BaseRepository):
             ORDER BY created_at ASC
             LIMIT $2
         """
-        results = await self._fetch_all(query, [str(meeting_id), limit])
+        results = await self._fetch_all(query, [meeting_id, limit])
         return [self._message_from_db(result) for result in results]
 
     async def mark_as_read(self, message_id: UUID) -> None:
@@ -171,7 +175,7 @@ class MessageRepository(BaseRepository):
             SET read_at = CURRENT_TIMESTAMP
             WHERE id = $1 AND read_at IS NULL
         """
-        await self._execute(query, [str(message_id)])
+        await self._execute(query, [message_id])
 
     async def get_unread_messages(self, recipient_id: UUID) -> List[Message]:
         """Get unread messages for a recipient.
@@ -189,7 +193,7 @@ class MessageRepository(BaseRepository):
             WHERE recipient_id = $1 AND read_at IS NULL
             ORDER BY created_at ASC
         """
-        results = await self._fetch_all(query, [str(recipient_id)])
+        results = await self._fetch_all(query, [recipient_id])
         return [self._message_from_db(result) for result in results]
 
     async def get_messages_between_agents(
@@ -216,7 +220,7 @@ class MessageRepository(BaseRepository):
             ORDER BY created_at ASC
             LIMIT $3
         """
-        results = await self._fetch_all(query, [str(recipient_id), str(sender_id), limit])
+        results = await self._fetch_all(query, [recipient_id, sender_id, limit])
         return [self._message_from_db(result) for result in results]
 
     async def get_unread_messages_from_sender(
@@ -240,7 +244,7 @@ class MessageRepository(BaseRepository):
             WHERE recipient_id = $1 AND sender_id = $2 AND read_at IS NULL
             ORDER BY created_at ASC
         """
-        results = await self._fetch_all(query, [str(recipient_id), str(sender_id)])
+        results = await self._fetch_all(query, [recipient_id, sender_id])
         return [self._message_from_db(result) for result in results]
 
     def _message_from_db(self, result: Dict[str, Any]) -> Message:

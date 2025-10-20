@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- Purpose: Group agents by organization/tenant
 -- ============================================================================
 
-CREATE TABLE organizations (
+CREATE TABLE IF NOT EXISTS organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     external_id VARCHAR(255) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE organizations (
 -- Purpose: Individual AI agents that communicate
 -- ============================================================================
 
-CREATE TABLE agents (
+CREATE TABLE IF NOT EXISTS agents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     external_id VARCHAR(255) NOT NULL UNIQUE,
     organization_id UUID NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -38,20 +38,20 @@ CREATE TABLE agents (
 -- Purpose: One-to-one conversation sessions (sync/async)
 -- ============================================================================
 
-CREATE TABLE sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    agent_a_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-    agent_b_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-    session_type VARCHAR(10) NOT NULL CHECK (session_type IN ('sync', 'async')),
-    status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'waiting', 'ended')),
-    locked_agent_id UUID REFERENCES agents(id) ON DELETE SET NULL,
+CREATE TABLE IF NOT EXISTS sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    agent_a_id UUID NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
+    agent_b_id UUID NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (
+        status IN ('active', 'waiting', 'ended')
+    ),
+    locked_agent_id UUID REFERENCES agents (id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     ended_at TIMESTAMP WITH TIME ZONE,
-
--- Ensure consistent agent ordering and prevent duplicate sessions
-CONSTRAINT sessions_agent_order CHECK (agent_a_id < agent_b_id),
-    UNIQUE (agent_a_id, agent_b_id, session_type)
+    -- Ensure consistent agent ordering and prevent duplicate sessions
+    CONSTRAINT sessions_agent_order CHECK (agent_a_id < agent_b_id),
+    UNIQUE (agent_a_id, agent_b_id)
 );
 
 -- ============================================================================
@@ -59,7 +59,7 @@ CONSTRAINT sessions_agent_order CHECK (agent_a_id < agent_b_id),
 -- Purpose: Multi-agent meeting sessions
 -- ============================================================================
 
-CREATE TABLE meetings (
+CREATE TABLE IF NOT EXISTS meetings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     host_id UUID NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
     status VARCHAR(20) NOT NULL DEFAULT 'created' CHECK (
@@ -83,7 +83,7 @@ CREATE TABLE meetings (
 -- Purpose: Track agents participating in meetings
 -- ============================================================================
 
-CREATE TABLE meeting_participants (
+CREATE TABLE IF NOT EXISTS meeting_participants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     meeting_id UUID NOT NULL REFERENCES meetings (id) ON DELETE CASCADE,
     agent_id UUID NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
@@ -108,7 +108,7 @@ CREATE TABLE meeting_participants (
 -- Purpose: Store all messages (one-way, conversation, meeting)
 -- ============================================================================
 
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sender_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     recipient_id UUID REFERENCES agents(id) ON DELETE CASCADE,
@@ -132,7 +132,7 @@ CONSTRAINT messages_recipient_or_meeting CHECK (
 -- Purpose: Audit log for meeting lifecycle events
 -- ============================================================================
 
-CREATE TABLE meeting_events (
+CREATE TABLE IF NOT EXISTS meeting_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     meeting_id UUID NOT NULL REFERENCES meetings (id) ON DELETE CASCADE,
     event_type VARCHAR(50) NOT NULL,
@@ -146,67 +146,67 @@ CREATE TABLE meeting_events (
 -- ============================================================================
 
 -- organizations
-CREATE INDEX idx_organizations_external_id ON organizations (external_id);
+CREATE INDEX IF NOT EXISTS idx_organizations_external_id ON organizations (external_id);
 
 -- agents
-CREATE INDEX idx_agents_external_id ON agents (external_id);
+CREATE INDEX IF NOT EXISTS idx_agents_external_id ON agents (external_id);
 
-CREATE INDEX idx_agents_organization_id ON agents (organization_id);
+CREATE INDEX IF NOT EXISTS idx_agents_organization_id ON agents (organization_id);
 
 -- sessions
-CREATE INDEX idx_sessions_agent_a ON sessions (agent_a_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_agent_a ON sessions (agent_a_id);
 
-CREATE INDEX idx_sessions_agent_b ON sessions (agent_b_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_agent_b ON sessions (agent_b_id);
 
-CREATE INDEX idx_sessions_status ON sessions (status);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions (status);
 
-CREATE INDEX idx_sessions_locked_agent ON sessions (locked_agent_id)
+CREATE INDEX IF NOT EXISTS idx_sessions_locked_agent ON sessions (locked_agent_id)
 WHERE
     locked_agent_id IS NOT NULL;
 
 -- meetings
-CREATE INDEX idx_meetings_host ON meetings (host_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_host ON meetings (host_id);
 
-CREATE INDEX idx_meetings_status ON meetings (status);
+CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings (status);
 
-CREATE INDEX idx_meetings_current_speaker ON meetings (current_speaker_id)
+CREATE INDEX IF NOT EXISTS idx_meetings_current_speaker ON meetings (current_speaker_id)
 WHERE
     current_speaker_id IS NOT NULL;
 
 -- meeting_participants
-CREATE INDEX idx_meeting_participants_meeting ON meeting_participants (meeting_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_participants_meeting ON meeting_participants (meeting_id);
 
-CREATE INDEX idx_meeting_participants_agent ON meeting_participants (agent_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_participants_agent ON meeting_participants (agent_id);
 
-CREATE INDEX idx_meeting_participants_status ON meeting_participants (meeting_id, status);
+CREATE INDEX IF NOT EXISTS idx_meeting_participants_status ON meeting_participants (meeting_id, status);
 
-CREATE INDEX idx_meeting_participants_join_order ON meeting_participants (meeting_id, join_order);
+CREATE INDEX IF NOT EXISTS idx_meeting_participants_join_order ON meeting_participants (meeting_id, join_order);
 
 -- messages
-CREATE INDEX idx_messages_sender ON messages (sender_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages (sender_id);
 
-CREATE INDEX idx_messages_recipient ON messages (recipient_id)
+CREATE INDEX IF NOT EXISTS idx_messages_recipient ON messages (recipient_id)
 WHERE
     recipient_id IS NOT NULL;
 
-CREATE INDEX idx_messages_session ON messages (session_id)
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages (session_id)
 WHERE
     session_id IS NOT NULL;
 
-CREATE INDEX idx_messages_meeting ON messages (meeting_id)
+CREATE INDEX IF NOT EXISTS idx_messages_meeting ON messages (meeting_id)
 WHERE
     meeting_id IS NOT NULL;
 
-CREATE INDEX idx_messages_created_at ON messages (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages (created_at DESC);
 
-CREATE INDEX idx_messages_content_gin ON messages (content) USING GIN;
+CREATE INDEX IF NOT EXISTS idx_messages_content_gin ON messages USING GIN (content);
 
 -- meeting_events
-CREATE INDEX idx_meeting_events_meeting ON meeting_events (meeting_id);
+CREATE INDEX IF NOT EXISTS idx_meeting_events_meeting ON meeting_events (meeting_id);
 
-CREATE INDEX idx_meeting_events_type ON meeting_events (meeting_id, event_type);
+CREATE INDEX IF NOT EXISTS idx_meeting_events_type ON meeting_events (meeting_id, event_type);
 
-CREATE INDEX idx_meeting_events_created_at ON meeting_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_meeting_events_created_at ON meeting_events (created_at DESC);
 
 -- ============================================================================
 -- Triggers for updated_at Timestamps
@@ -220,13 +220,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_organizations_updated_at ON organizations;
+
 CREATE TRIGGER update_organizations_updated_at
     BEFORE UPDATE ON organizations
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_agents_updated_at ON agents;
+
 CREATE TRIGGER update_agents_updated_at
     BEFORE UPDATE ON agents
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_sessions_updated_at ON sessions;
 
 CREATE TRIGGER update_sessions_updated_at
     BEFORE UPDATE ON sessions
@@ -237,6 +243,8 @@ CREATE TRIGGER update_sessions_updated_at
 -- ============================================================================
 
 -- Convert UUID to bigint for advisory locks
+DROP FUNCTION IF EXISTS uuid_to_lock_key (UUID);
+
 CREATE OR REPLACE FUNCTION uuid_to_lock_key(uuid_val UUID)
 RETURNS BIGINT AS $$
 BEGIN

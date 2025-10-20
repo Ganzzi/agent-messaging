@@ -18,7 +18,7 @@ from ..exceptions import (
     TimeoutError,
 )
 from ..handlers.registry import HandlerRegistry
-from ..models import MessageContext, MessageType, SessionStatus, SessionType
+from ..models import MessageContext, MessageType, SessionStatus
 from ..utils.locks import SessionLock
 
 logger = logging.getLogger(__name__)
@@ -169,14 +169,10 @@ class Conversation(Generic[T]):
         if not self._handler_registry.has_handler():
             raise NoHandlerRegisteredError("No handler registered")
 
-        # Create or get active session (use CONVERSATION type for unified sessions)
-        session = await self._session_repo.get_active_session(
-            sender.id, recipient.id, SessionType.CONVERSATION
-        )
+        # Create or get active session
+        session = await self._session_repo.get_active_session(sender.id, recipient.id)
         if not session:
-            session_id = await self._session_repo.create(
-                sender.id, recipient.id, SessionType.CONVERSATION
-            )
+            session_id = await self._session_repo.create(sender.id, recipient.id)
             session = await self._session_repo.get_by_id(session_id)
             if not session:
                 raise RuntimeError("Failed to create session")
@@ -346,13 +342,10 @@ class Conversation(Generic[T]):
             raise AgentNotFoundError(f"Recipient agent not found: {recipient_external_id}")
 
         # Create or get active conversation session
-        session = await self._session_repo.get_active_session(
-            sender.id, recipient.id, SessionType.CONVERSATION
-        )
+        # Create or get active conversation session
+        session = await self._session_repo.get_active_session(sender.id, recipient.id)
         if not session:
-            session_id = await self._session_repo.create(
-                sender.id, recipient.id, SessionType.CONVERSATION
-            )
+            session_id = await self._session_repo.create(sender.id, recipient.id)
             session = await self._session_repo.get_by_id(session_id)
             if not session:
                 raise RuntimeError("Failed to create session")
@@ -433,9 +426,7 @@ class Conversation(Generic[T]):
             raise AgentNotFoundError("One or both agents not found")
 
         # Find active session
-        session = await self._session_repo.get_active_session(
-            agent1.id, agent2.id, SessionType.CONVERSATION
-        )
+        session = await self._session_repo.get_active_session(agent1.id, agent2.id)
         if not session:
             raise RuntimeError(
                 f"No active conversation between {agent_external_id} and {other_agent_external_id}"
@@ -623,13 +614,9 @@ class Conversation(Generic[T]):
         logger.info(f"No existing messages, waiting for message from {agent_b_external_id}")
 
         # Get or create session for waiting
-        session = await self._session_repo.get_active_session(
-            agent_b.id, agent_a.id, SessionType.CONVERSATION
-        )
+        session = await self._session_repo.get_active_session(agent_b.id, agent_a.id)
         if not session:
-            session_id = await self._session_repo.create(
-                agent_b.id, agent_a.id, SessionType.CONVERSATION
-            )
+            session_id = await self._session_repo.create(agent_b.id, agent_a.id)
             session = await self._session_repo.get_by_id(session_id)
             if not session:
                 raise RuntimeError("Failed to create session for waiting")

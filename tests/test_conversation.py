@@ -12,7 +12,6 @@ from agent_messaging.models import (
     MessageType,
     Session,
     SessionStatus,
-    SessionType,
 )
 from agent_messaging.exceptions import AgentNotFoundError, TimeoutError
 
@@ -106,7 +105,6 @@ class TestConversation:
             id=session_id,
             agent_a_id=sender.id,
             agent_b_id=recipient.id,
-            session_type=SessionType.CONVERSATION,
             status=SessionStatus.ACTIVE,
             locked_agent_id=None,
             created_at=MagicMock(),
@@ -170,9 +168,7 @@ class TestConversation:
             assert response == {"reply": "Hello back!"}
 
             # Verify session was created
-            mock_session_repo.create.assert_called_once_with(
-                sender.id, recipient.id, SessionType.CONVERSATION
-            )
+            mock_session_repo.create.assert_called_once_with(sender.id, recipient.id)
 
             # Verify message was marked as read
             mock_message_repo.mark_as_read.assert_called_once_with(response_message.id)
@@ -217,7 +213,6 @@ class TestConversation:
             id=session_id,
             agent_a_id=sender.id,
             agent_b_id=recipient.id,
-            session_type=SessionType.CONVERSATION,
             status=SessionStatus.ACTIVE,
             locked_agent_id=None,
             created_at=MagicMock(),
@@ -283,7 +278,6 @@ class TestConversation:
             id=session_id,
             agent_a_id=agent1.id,
             agent_b_id=agent2.id,
-            session_type=SessionType.CONVERSATION,
             status=SessionStatus.ACTIVE,
             locked_agent_id=None,
             created_at=MagicMock(),
@@ -362,7 +356,6 @@ class TestConversation:
             id=session_id,
             agent_a_id=sender.id,
             agent_b_id=recipient.id,
-            session_type=SessionType.CONVERSATION,
             status=SessionStatus.ACTIVE,
             locked_agent_id=None,
             created_at=MagicMock(),
@@ -380,9 +373,7 @@ class TestConversation:
         await conversation.send_no_wait("alice", "bob", {"text": "Hello!"})
 
         # Verify session was created
-        mock_session_repo.create.assert_called_once_with(
-            sender.id, recipient.id, SessionType.CONVERSATION
-        )
+        mock_session_repo.create.assert_called_once_with(sender.id, recipient.id)
 
         # Verify message was created
         mock_message_repo.create.assert_called_once()
@@ -559,7 +550,6 @@ class TestConversation:
             id=session_id,
             agent_a_id=sender_id,
             agent_b_id=recipient_id,
-            session_type=SessionType.CONVERSATION,
             status=SessionStatus.ACTIVE,
             locked_agent_id=None,
             created_at=MagicMock(),

@@ -26,7 +26,10 @@ class OrganizationRepository(BaseRepository):
             RETURNING id
         """
         result = await self._fetch_one(query, [external_id, name])
-        return result["id"]
+        org_id = result["id"]
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        return org_id
 
     async def get_by_external_id(self, external_id: str) -> Optional[Organization]:
         """Get organization by external ID.
@@ -59,5 +62,5 @@ class OrganizationRepository(BaseRepository):
             FROM organizations
             WHERE id = $1
         """
-        result = await self._fetch_one(query, [str(organization_id)])
+        result = await self._fetch_one(query, [organization_id])
         return Organization(**result) if result else None

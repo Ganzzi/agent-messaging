@@ -59,16 +59,16 @@ async def main():
         await sdk.register_agent("alice", "my_org", "Alice")
         await sdk.register_agent("bob", "my_org", "Bob")
         
-        # Register handler for Bob
-        @sdk.register_handler("bob")
-        async def bob_handler(message: ChatMessage, context):
-            print(f"Bob received: {message.text}")
+        # Register shared handler (Phase 10: handlers are shared, not per-agent)
+        @sdk.register_handler()
+        async def message_handler(message: ChatMessage, context):
+            print(f"{context.recipient_external_id} received: {message.text}")
         
-        # Send message
+        # Send message (Phase 10: one-to-many pattern)
         await sdk.one_way.send(
-            "alice",
-            "bob",
-            ChatMessage(text="Hello Bob!")
+            sender_external_id="alice",
+            recipient_external_ids=["bob"],
+            message=ChatMessage(text="Hello Bob!")
         )
 
 
@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
 **Output:**
 ```
-Bob received: Hello Bob!
+bob received: Hello Bob!
 ```
 
 [See full Quick Start Guide →](docs/quick-start.md)
@@ -110,10 +110,10 @@ All planning documentation is complete and ready for implementation:
 ### Customer Support Bot
 
 ```python
-response = await sdk.sync_conversation.send_and_wait(
-    "customer",
-    "support_agent",
-    SupportMessage(query="How do I reset my password?"),
+response = await sdk.conversation.send_and_wait(
+    sender_external_id="customer",
+    recipient_external_id="support_agent",
+    message=SupportMessage(query="How do I reset my password?"),
     timeout=60.0
 )
 print(f"Agent: {response.answer}")
@@ -123,15 +123,16 @@ print(f"Agent: {response.answer}")
 
 ```python
 meeting_id = await sdk.meeting.create_meeting(
-    host="moderator",
-    agents=["moderator", "designer", "engineer", "product_manager"],
+    organizer_external_id="moderator",
+    participant_external_ids=["designer", "engineer", "product_manager"],
     turn_duration=120.0
 )
 
 await sdk.meeting.start_meeting(
-    "moderator",
-    meeting_id,
-    IdeaMessage(content="Let's discuss the new feature...")
+    organizer_external_id="moderator",
+    meeting_id=meeting_id,
+    initial_message=IdeaMessage(content="Let's discuss the new feature..."),
+    next_speaker="designer"
 )
 ```
 
@@ -139,18 +140,24 @@ await sdk.meeting.start_meeting(
 
 ```python
 # Step 1: Preprocess
-result1 = await sdk.sync_conversation.send_and_wait(
-    "orchestrator", "preprocessor", task_data
+result1 = await sdk.conversation.send_and_wait(
+    sender_external_id="orchestrator",
+    recipient_external_id="preprocessor",
+    message=task_data
 )
 
 # Step 2: Analyze
-result2 = await sdk.sync_conversation.send_and_wait(
-    "orchestrator", "analyzer", result1
+result2 = await sdk.conversation.send_and_wait(
+    sender_external_id="orchestrator",
+    recipient_external_id="analyzer",
+    message=result1
 )
 
 # Step 3: Generate output
-final = await sdk.sync_conversation.send_and_wait(
-    "orchestrator", "generator", result2
+final = await sdk.conversation.send_and_wait(
+    sender_external_id="orchestrator",
+    recipient_external_id="generator",
+    message=result2
 )
 ```
 
@@ -158,7 +165,7 @@ final = await sdk.sync_conversation.send_and_wait(
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture (Phase 10: Refactored)
 
 ```
 ┌─────────────────────────────────────┐
@@ -171,8 +178,9 @@ final = await sdk.sync_conversation.send_and_wait(
 │   Agent Messaging SDK               │
 │                                     │
 │  ┌──────────┐  ┌──────────────┐   │
-│  │ One-Way  │  │ Sync/Async   │   │
-│  │ Messages │  │ Conversations│   │
+│  │ One-Way  │  │ Unified      │   │
+│  │ Messenger│  │ Conversation │   │
+│  │(1-to-N)  │  │ (Sync/Async) │   │
 │  └──────────┘  └──────────────┘   │
 │                                     │
 │  ┌──────────────────────────────┐  │
@@ -181,7 +189,8 @@ final = await sdk.sync_conversation.send_and_wait(
 │  └──────────────────────────────┘  │
 │                                     │
 │  ┌──────────────────────────────┐  │
-│  │   Handler & Event System     │  │
+│  │   Shared Handler Registry    │  │
+│  │   + Typed Event System       │  │
 │  └──────────────────────────────┘  │
 │                                     │
 │  ┌──────────────────────────────┐  │

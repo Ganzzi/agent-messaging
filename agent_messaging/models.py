@@ -30,8 +30,6 @@ class SessionType(str, Enum):
     """Types of conversation sessions."""
 
     SYNC = "sync"
-    ASYNC = "async"
-    CONVERSATION = "conversation"
 
 
 class SessionStatus(str, Enum):
@@ -104,7 +102,6 @@ class Session(BaseModel):
     id: UUID
     agent_a_id: UUID
     agent_b_id: UUID
-    session_type: SessionType
     status: SessionStatus
     locked_agent_id: Optional[UUID] = None
     created_at: datetime

@@ -26,8 +26,11 @@ class AgentRepository(BaseRepository):
             VALUES ($1, $2, $3)
             RETURNING id
         """
-        result = await self._fetch_one(query, [external_id, str(organization_id), name])
-        return result["id"]
+        result = await self._fetch_one(query, [external_id, organization_id, name])
+        agent_id = result["id"]
+        if isinstance(agent_id, str):
+            agent_id = UUID(agent_id)
+        return agent_id
 
     async def get_by_external_id(self, external_id: str) -> Optional[Agent]:
         """Get agent by external ID.
@@ -60,7 +63,7 @@ class AgentRepository(BaseRepository):
             FROM agents
             WHERE id = $1
         """
-        result = await self._fetch_one(query, [str(agent_id)])
+        result = await self._fetch_one(query, [agent_id])
         return Agent(**result) if result else None
 
     async def get_by_organization(self, organization_id: UUID) -> list[Agent]:
@@ -78,5 +81,5 @@ class AgentRepository(BaseRepository):
             WHERE organization_id = $1
             ORDER BY created_at
         """
-        results = await self._fetch_all(query, [str(organization_id)])
+        results = await self._fetch_all(query, [organization_id])
         return [Agent(**result) for result in results]

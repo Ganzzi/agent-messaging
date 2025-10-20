@@ -15,7 +15,6 @@ from agent_messaging.models import (
     Session,
     Meeting,
     MessageType,
-    SessionType,
     SessionStatus,
     MeetingStatus,
 )
