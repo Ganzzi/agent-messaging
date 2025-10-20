@@ -1,9 +1,10 @@
 """PostgreSQL database manager using psqlpy."""
 
 import logging
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Optional
 
-from psqlpy import ConnectionPool
+from psqlpy import Connection, ConnectionPool
 
 from ..config import DatabaseConfig
 from ..exceptions import DatabaseError
@@ -49,11 +50,16 @@ class PostgreSQLManager:
             self.pool = None
             logger.info("PostgreSQL connection pool closed")
 
-    async def connection(self):
-        """Get a database connection from the pool.
+    @asynccontextmanager
+    async def connection(self) -> AsyncGenerator[Connection, None]:
+        """Get a connection from the pool (context manager).
 
-        Returns:
-            Connection: psqlpy connection (async context manager)
+        Usage:
+            async with db_manager.connection() as conn:
+                result = await conn.execute("SELECT * FROM table")
+
+        Yields:
+            Connection from the pool
 
         Raises:
             DatabaseError: If pool is not initialized or connection fails
@@ -62,7 +68,12 @@ class PostgreSQLManager:
             raise DatabaseError("Database pool not initialized. Call initialize() first.")
 
         try:
-            return await self.pool.acquire()
+            conn: Connection = await self.pool.connection()
+            try:
+                yield conn
+            finally:
+                # Connection is automatically returned to pool when context exits
+                pass
         except Exception as e:
             logger.error(f"Failed to acquire database connection: {e}")
             raise DatabaseError(f"Failed to acquire database connection: {e}") from e

@@ -1,9 +1,10 @@
 """Base repository class for database operations."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from psqlpy import Connection
+if TYPE_CHECKING:
+    from ..manager import PostgreSQLManager
 
 from ...exceptions import DatabaseError
 
@@ -13,13 +14,13 @@ logger = logging.getLogger(__name__)
 class BaseRepository:
     """Base class for all repository implementations."""
 
-    def __init__(self, pool: Any):
-        """Initialize repository with connection pool.
+    def __init__(self, db_manager: "PostgreSQLManager"):
+        """Initialize repository with database manager.
 
         Args:
-            pool: psqlpy ConnectionPool instance
+            db_manager: PostgreSQLManager instance
         """
-        self.pool = pool
+        self.db_manager = db_manager
 
     async def _execute(self, query: str, params: Optional[List[Any]] = None) -> Any:
         """Execute a query and return the result.
@@ -34,9 +35,9 @@ class BaseRepository:
         Raises:
             DatabaseError: If query execution fails
         """
-        async with self.pool.acquire() as connection:
+        async with self.db_manager.connection() as conn:
             try:
-                result = await connection.execute(query, params or [])
+                result = await conn.execute(query, params or [])
                 return result
             except Exception as e:
                 logger.error(f"Query execution failed: {query} with params {params}")
@@ -57,10 +58,11 @@ class BaseRepository:
         Raises:
             DatabaseError: If query execution fails
         """
-        async with self.pool.acquire() as connection:
+        async with self.db_manager.connection() as conn:
             try:
-                result = await connection.fetch_row(query, params or [])
-                return result.result() if result else None
+                result = await conn.execute(query, params or [])
+                rows = result.result()
+                return rows[0] if rows else None
             except Exception as e:
                 logger.error(f"Query fetch_one failed: {query} with params {params}")
                 raise DatabaseError(f"Database query failed: {e}") from e
@@ -80,9 +82,9 @@ class BaseRepository:
         Raises:
             DatabaseError: If query execution fails
         """
-        async with self.pool.acquire() as connection:
+        async with self.db_manager.connection() as conn:
             try:
-                result = await connection.fetch(query, params or [])
+                result = await conn.execute(query, params or [])
                 return result.result()
             except Exception as e:
                 logger.error(f"Query fetch_all failed: {query} with params {params}")
@@ -101,10 +103,16 @@ class BaseRepository:
         Raises:
             DatabaseError: If query execution fails
         """
-        async with self.pool.acquire() as connection:
+        async with self.db_manager.connection() as conn:
             try:
-                result = await connection.fetch_val(query, params or [])
-                return result
+                result = await conn.execute(query, params or [])
+                rows = result.result()
+                if rows and len(rows) > 0:
+                    # Get first value of first row
+                    first_row = rows[0]
+                    if isinstance(first_row, dict) and first_row:
+                        return next(iter(first_row.values()))
+                return None
             except Exception as e:
                 logger.error(f"Query fetch_val failed: {query} with params {params}")
                 raise DatabaseError(f"Database query failed: {e}") from e

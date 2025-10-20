@@ -86,9 +86,7 @@ def mock_repos(mock_org_repo, mock_agent_repo):
 def mock_registry():
     """Mock handler registry."""
     registry = MagicMock()
-    registry.register = MagicMock(
-        return_value=lambda func: func
-    )  # Return a decorator that just returns the function
+    registry.register = MagicMock(side_effect=lambda func: func)  # Return the function itself
     registry.has_handler = MagicMock(return_value=True)
     registry.shutdown = AsyncMock()
     return registry
@@ -350,12 +348,12 @@ class TestAgentMessagingSDK:
 
             async with AgentMessaging[dict](mock_config) as sdk:
                 # Test handler registration
-                @sdk.register_handler("test_agent")
+                @sdk.register_handler()
                 async def test_handler(message, context):
                     return {"response": "ok"}
 
                 # Verify handler registry was called
-                mock_registry.register.assert_called_once_with("test_agent")
+                mock_registry.register.assert_called_once_with(test_handler)
 
     @pytest.mark.asyncio
     async def test_register_event_handler(
@@ -415,8 +413,8 @@ class TestAgentMessagingSDK:
         ):
 
             async with AgentMessaging[dict](mock_config) as sdk:
-                result = sdk.has_handler("test_agent")
-                mock_handler_registry.has_handler.assert_called_once_with("test_agent")
+                result = sdk.has_handler()
+                mock_handler_registry.has_handler.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_messaging_properties(self, mock_config, mock_db_manager, mock_repos):
@@ -443,13 +441,9 @@ class TestAgentMessagingSDK:
                 one_way = sdk.one_way
                 assert one_way is not None
 
-                # Test sync_conversation property
-                sync_conv = sdk.sync_conversation
-                assert sync_conv is not None
-
-                # Test async_conversation property
-                async_conv = sdk.async_conversation
-                assert async_conv is not None
+                # Test conversation property (unified sync/async)
+                conv = sdk.conversation
+                assert conv is not None
 
                 # Test meeting property
                 meeting = sdk.meeting

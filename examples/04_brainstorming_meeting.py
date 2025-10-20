@@ -110,106 +110,15 @@ async def alice_agent(sdk: AgentMessaging):
     """Alice agent participant."""
     logger.info("Alice: Joining brainstorming meeting")
 
-    # Register handler for meeting messages
-    @sdk.register_handler("alice")
-    async def alice_handler(message, context):
-        if context.meeting_id:
-            logger.info(f"Alice: Received meeting message: {message}")
-
-            # Attend the meeting if not already attending
-            try:
-                await sdk.meeting.attend_meeting("alice", context.meeting_id)
-                logger.info("Alice: Joined meeting")
-            except Exception as e:
-                logger.debug(f"Alice: Already attending or error: {e}")
-
-            # If it's Alice's turn, share an idea
-            status = await sdk.meeting.get_meeting_status(context.meeting_id)
-            if status.get("current_speaker_external_id") == "alice":
-                logger.info("Alice: It's my turn! Sharing idea...")
-
-                await sdk.meeting.speak(
-                    speaker_external_id="alice",
-                    meeting_id=context.meeting_id,
-                    message=IdeaMessage(
-                        speaker="alice",
-                        idea="We should add a dark mode toggle to improve user experience.",
-                        category="feature",
-                    ),
-                    next_speaker="bob",
-                )
-
-                logger.info("Alice: Idea shared, passing turn to Bob")
-
 
 async def bob_agent(sdk: AgentMessaging):
     """Bob agent participant."""
     logger.info("Bob: Joining brainstorming meeting")
 
-    @sdk.register_handler("bob")
-    async def bob_handler(message, context):
-        if context.meeting_id:
-            logger.info(f"Bob: Received meeting message: {message}")
-
-            # Attend meeting
-            try:
-                await sdk.meeting.attend_meeting("bob", context.meeting_id)
-                logger.info("Bob: Joined meeting")
-            except Exception as e:
-                logger.debug(f"Bob: Already attending or error: {e}")
-
-            # Share idea when it's Bob's turn
-            status = await sdk.meeting.get_meeting_status(context.meeting_id)
-            if status.get("current_speaker_external_id") == "bob":
-                logger.info("Bob: It's my turn! Sharing idea...")
-
-                await sdk.meeting.speak(
-                    speaker_external_id="bob",
-                    meeting_id=context.meeting_id,
-                    message=IdeaMessage(
-                        speaker="bob",
-                        idea="The API response times are too slow. We need to optimize database queries.",
-                        category="improvement",
-                    ),
-                    next_speaker="charlie",
-                )
-
-                logger.info("Bob: Idea shared, passing turn to Charlie")
-
 
 async def charlie_agent(sdk: AgentMessaging):
     """Charlie agent participant."""
     logger.info("Charlie: Joining brainstorming meeting")
-
-    @sdk.register_handler("charlie")
-    async def charlie_handler(message, context):
-        if context.meeting_id:
-            logger.info(f"Charlie: Received meeting message: {message}")
-
-            # Attend meeting
-            try:
-                await sdk.meeting.attend_meeting("charlie", context.meeting_id)
-                logger.info("Charlie: Joined meeting")
-            except Exception as e:
-                logger.debug(f"Charlie: Already attending or error: {e}")
-
-            # Share idea when it's Charlie's turn
-            status = await sdk.meeting.get_meeting_status(context.meeting_id)
-            if status.get("current_speaker_external_id") == "charlie":
-                logger.info("Charlie: It's my turn! Sharing idea...")
-
-                await sdk.meeting.speak(
-                    speaker_external_id="charlie",
-                    meeting_id=context.meeting_id,
-                    message=IdeaMessage(
-                        speaker="charlie",
-                        idea="We should add comprehensive error logging to help with debugging.",
-                        category="bug_fix",
-                    ),
-                    next_speaker="alice",  # Back to Alice for another round
-                )
-
-                logger.info("Charlie: Idea shared, passing turn back to Alice")
 
 
 async def main():
@@ -225,6 +134,65 @@ async def main():
         await sdk.register_agent("alice", "brainstorm_co", "Alice")
         await sdk.register_agent("bob", "brainstorm_co", "Bob")
         await sdk.register_agent("charlie", "brainstorm_co", "Charlie")
+
+        # Register global handler for all agents
+        @sdk.register_handler()
+        async def global_handler(message, context):
+            recipient = context.recipient_external_id
+
+            if recipient in ["alice", "bob", "charlie"]:
+                # Handle meeting messages for participants
+                if context.meeting_id:
+                    logger.info(f"{recipient.capitalize()}: Received meeting message: {message}")
+
+                    # Attend the meeting if not already attending
+                    try:
+                        await sdk.meeting.attend_meeting(recipient, context.meeting_id)
+                        logger.info(f"{recipient.capitalize()}: Joined meeting")
+                    except Exception as e:
+                        logger.debug(f"{recipient.capitalize()}: Already attending or error: {e}")
+
+                    # If it's this agent's turn, share an idea
+                    status = await sdk.meeting.get_meeting_status(context.meeting_id)
+                    if status.get("current_speaker_external_id") == recipient:
+                        logger.info(f"{recipient.capitalize()}: It's my turn! Sharing idea...")
+
+                        # Different ideas for each agent
+                        if recipient == "alice":
+                            idea = IdeaMessage(
+                                speaker="alice",
+                                idea="We should add a dark mode toggle to improve user experience.",
+                                category="feature",
+                            )
+                            next_speaker = "bob"
+                        elif recipient == "bob":
+                            idea = IdeaMessage(
+                                speaker="bob",
+                                idea="The API response times are too slow. We need to optimize database queries.",
+                                category="improvement",
+                            )
+                            next_speaker = "charlie"
+                        elif recipient == "charlie":
+                            idea = IdeaMessage(
+                                speaker="charlie",
+                                idea="We should add comprehensive error logging to help with debugging.",
+                                category="bug_fix",
+                            )
+                            next_speaker = "alice"  # Back to Alice for another round
+
+                        await sdk.meeting.speak(
+                            speaker_external_id=recipient,
+                            meeting_id=context.meeting_id,
+                            message=idea,
+                            next_speaker=next_speaker,
+                        )
+
+                        logger.info(
+                            f"{recipient.capitalize()}: Idea shared, passing turn to {next_speaker}"
+                        )
+            elif recipient == "moderator":
+                # Moderator doesn't need message handling in this example
+                pass
 
         # Start all agents concurrently
         await asyncio.gather(

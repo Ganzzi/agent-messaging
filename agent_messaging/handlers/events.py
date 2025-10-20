@@ -3,32 +3,79 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Union
 from uuid import UUID
 
-from ..models import MeetingEventPayload, MeetingEventType
+from ..models import (
+    MeetingEventType,
+    MeetingStartedEventData,
+    MeetingEndedEventData,
+    TurnChangedEventData,
+    ParticipantJoinedEventData,
+    ParticipantLeftEventData,
+    TimeoutOccurredEventData,
+)
 
 logger = logging.getLogger(__name__)
 
+# Union type for all event data types
+MeetingEventData = Union[
+    MeetingStartedEventData,
+    MeetingEndedEventData,
+    TurnChangedEventData,
+    ParticipantJoinedEventData,
+    ParticipantLeftEventData,
+    TimeoutOccurredEventData,
+]
+
+
+class MeetingEvent:
+    """Container for a meeting event with type-safe data."""
+
+    def __init__(
+        self,
+        meeting_id: UUID,
+        event_type: MeetingEventType,
+        data: MeetingEventData,
+        timestamp: datetime = None,
+    ):
+        """Initialize meeting event.
+
+        Args:
+            meeting_id: Meeting UUID
+            event_type: Type of event
+            data: Type-safe event data
+            timestamp: Event timestamp (defaults to now)
+        """
+        self.meeting_id = meeting_id
+        self.event_type = event_type
+        self.data = data
+        self.timestamp = timestamp or datetime.now()
+
 
 class MeetingEventHandler:
-    """Handles meeting events and notifications."""
+    """Handles meeting events and notifications with type-safe event data."""
 
     def __init__(self):
         """Initialize the event handler."""
         # event_type -> list of handler functions
-        self._handlers: Dict[MeetingEventType, List[Callable]] = {}
+        self._handlers: Dict[MeetingEventType, List[Callable[[MeetingEvent], None]]] = {}
 
     def register_handler(
         self,
         event_type: MeetingEventType,
-        handler: Callable[[MeetingEventPayload], None],
+        handler: Callable[[MeetingEvent], None],
     ) -> None:
         """Register an event handler.
 
         Args:
             event_type: Type of meeting event to handle
             handler: Async function to call when event occurs
+
+        Example:
+            async def on_meeting_started(event: MeetingEvent):
+                data: MeetingStartedEventData = event.data
+                print(f"Meeting {event.meeting_id} started by {data.host_id}")
         """
         if event_type not in self._handlers:
             self._handlers[event_type] = []
@@ -39,7 +86,7 @@ class MeetingEventHandler:
     def unregister_handler(
         self,
         event_type: MeetingEventType,
-        handler: Callable[[MeetingEventPayload], None],
+        handler: Callable[[MeetingEvent], None],
     ) -> None:
         """Unregister an event handler.
 
@@ -58,22 +105,18 @@ class MeetingEventHandler:
         self,
         meeting_id: UUID,
         event_type: MeetingEventType,
-        data: Dict[str, Any] = None,
+        data: MeetingEventData,
     ) -> None:
         """Emit a meeting event to all registered handlers.
 
         Args:
             meeting_id: Meeting UUID
             event_type: Type of event
-            data: Additional event data
+            data: Type-safe event data
         """
-        if data is None:
-            data = {}
-
-        payload = MeetingEventPayload(
+        event = MeetingEvent(
             meeting_id=meeting_id,
             event_type=event_type,
-            timestamp=datetime.now(),
             data=data,
         )
 
@@ -83,7 +126,7 @@ class MeetingEventHandler:
             for handler in self._handlers[event_type]:
                 try:
                     # Create task for each handler to run concurrently
-                    task = asyncio.create_task(handler(payload))
+                    task = asyncio.create_task(handler(event))
                     tasks.append(task)
                 except Exception as e:
                     logger.error(f"Error creating task for event handler: {e}")
@@ -103,14 +146,15 @@ class MeetingEventHandler:
         host_id: UUID,
         participant_ids: List[UUID],
     ) -> None:
-        """Emit meeting started event."""
+        """Emit meeting started event with type-safe data."""
+        data = MeetingStartedEventData(
+            host_id=host_id,
+            participant_ids=participant_ids,
+        )
         await self.emit_event(
             meeting_id=meeting_id,
             event_type=MeetingEventType.MEETING_STARTED,
-            data={
-                "host_id": str(host_id),
-                "participant_ids": [str(pid) for pid in participant_ids],
-            },
+            data=data,
         )
 
     async def emit_meeting_ended(
@@ -118,13 +162,12 @@ class MeetingEventHandler:
         meeting_id: UUID,
         host_id: UUID,
     ) -> None:
-        """Emit meeting ended event."""
+        """Emit meeting ended event with type-safe data."""
+        data = MeetingEndedEventData(host_id=host_id)
         await self.emit_event(
             meeting_id=meeting_id,
             event_type=MeetingEventType.MEETING_ENDED,
-            data={
-                "host_id": str(host_id),
-            },
+            data=data,
         )
 
     async def emit_turn_changed(
@@ -133,14 +176,15 @@ class MeetingEventHandler:
         previous_speaker_id: UUID = None,
         current_speaker_id: UUID = None,
     ) -> None:
-        """Emit turn changed event."""
+        """Emit turn changed event with type-safe data."""
+        data = TurnChangedEventData(
+            previous_speaker_id=previous_speaker_id,
+            current_speaker_id=current_speaker_id,
+        )
         await self.emit_event(
             meeting_id=meeting_id,
             event_type=MeetingEventType.TURN_CHANGED,
-            data={
-                "previous_speaker_id": str(previous_speaker_id) if previous_speaker_id else None,
-                "current_speaker_id": str(current_speaker_id) if current_speaker_id else None,
-            },
+            data=data,
         )
 
     async def emit_participant_joined(
@@ -148,13 +192,12 @@ class MeetingEventHandler:
         meeting_id: UUID,
         agent_id: UUID,
     ) -> None:
-        """Emit participant joined event."""
+        """Emit participant joined event with type-safe data."""
+        data = ParticipantJoinedEventData(agent_id=agent_id)
         await self.emit_event(
             meeting_id=meeting_id,
             event_type=MeetingEventType.PARTICIPANT_JOINED,
-            data={
-                "agent_id": str(agent_id),
-            },
+            data=data,
         )
 
     async def emit_participant_left(
@@ -162,13 +205,12 @@ class MeetingEventHandler:
         meeting_id: UUID,
         agent_id: UUID,
     ) -> None:
-        """Emit participant left event."""
+        """Emit participant left event with type-safe data."""
+        data = ParticipantLeftEventData(agent_id=agent_id)
         await self.emit_event(
             meeting_id=meeting_id,
             event_type=MeetingEventType.PARTICIPANT_LEFT,
-            data={
-                "agent_id": str(agent_id),
-            },
+            data=data,
         )
 
     async def emit_timeout_occurred(
@@ -177,12 +219,13 @@ class MeetingEventHandler:
         timed_out_agent_id: UUID,
         next_speaker_id: UUID,
     ) -> None:
-        """Emit timeout occurred event."""
+        """Emit timeout occurred event with type-safe data."""
+        data = TimeoutOccurredEventData(
+            timed_out_agent_id=timed_out_agent_id,
+            next_speaker_id=next_speaker_id,
+        )
         await self.emit_event(
             meeting_id=meeting_id,
             event_type=MeetingEventType.TIMEOUT_OCCURRED,
-            data={
-                "timed_out_agent_id": str(timed_out_agent_id),
-                "next_speaker_id": str(next_speaker_id),
-            },
+            data=data,
         )

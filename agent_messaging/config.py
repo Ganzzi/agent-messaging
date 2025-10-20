@@ -1,10 +1,10 @@
 """Configuration module for Agent Messaging Protocol SDK."""
 
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class DatabaseConfig(BaseModel):
+class DatabaseConfig(BaseSettings):
     """Database connection configuration."""
 
     host: str = Field(default="localhost", description="PostgreSQL host")
@@ -16,13 +16,15 @@ class DatabaseConfig(BaseModel):
     min_pool_size: int = Field(default=5, description="Minimum connection pool size")
     connect_timeout_sec: int = Field(default=10, description="Connection timeout in seconds")
 
+    model_config = SettingsConfigDict(env_prefix="POSTGRES_")
+
     @property
     def dsn(self) -> str:
         """Generate PostgreSQL DSN string."""
         return f"postgres://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
 
 
-class MessagingConfig(BaseModel):
+class MessagingConfig(BaseSettings):
     """Messaging behavior configuration."""
 
     default_sync_timeout: float = Field(
@@ -34,6 +36,8 @@ class MessagingConfig(BaseModel):
     handler_timeout: float = Field(
         default=30.0, description="Timeout for message handlers (seconds)"
     )
+
+    model_config = SettingsConfigDict(env_prefix="MESSAGING_")
 
 
 class Config(BaseSettings):
@@ -48,7 +52,7 @@ class Config(BaseSettings):
         """Pydantic settings configuration."""
 
         env_file = ".env"
-        env_nested_delimiter = "__"  # Allows POSTGRES__HOST to map to database.host
+        extra = "ignore"  # Ignore extra environment variables
 
 
 # Global configuration instance

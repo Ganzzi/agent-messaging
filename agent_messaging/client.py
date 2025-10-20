@@ -17,8 +17,7 @@ from .exceptions import (
 from .handlers.registry import HandlerRegistry
 from .handlers.events import MeetingEventHandler, MeetingEventType
 from .messaging.one_way import OneWayMessenger
-from .messaging.sync_conversation import SyncConversation
-from .messaging.async_conversation import AsyncConversation
+from .messaging.conversation import Conversation
 from .messaging.meeting import MeetingManager
 from .models import CreateAgentRequest, CreateOrganizationRequest
 
@@ -77,11 +76,11 @@ class AgentMessaging(Generic[T]):
         await self._db_manager.initialize()
 
         # Initialize repositories
-        self._org_repo = OrganizationRepository(self._db_manager.pool)
-        self._agent_repo = AgentRepository(self._db_manager.pool)
-        self._message_repo = MessageRepository(self._db_manager.pool)
-        self._session_repo = SessionRepository(self._db_manager.pool)
-        self._meeting_repo = MeetingRepository(self._db_manager.pool)
+        self._org_repo = OrganizationRepository(self._db_manager)
+        self._agent_repo = AgentRepository(self._db_manager)
+        self._message_repo = MessageRepository(self._db_manager)
+        self._session_repo = SessionRepository(self._db_manager)
+        self._meeting_repo = MeetingRepository(self._db_manager)
 
         return self
 
@@ -250,63 +249,36 @@ class AgentMessaging(Generic[T]):
     # Handler Registration
     # ========================================================================
 
-    def register_handler(self, agent_external_id: str):
-        """Register a message handler for an agent.
+    def register_handler(self):
+        """Register a message handler for all agents.
 
-        This decorator registers an async function to handle messages sent to the agent.
-
-        Args:
-            agent_external_id: External ID of the agent
+        This decorator registers an async function to handle messages for all agents.
+        Only one handler can be registered globally.
 
         Returns:
             Decorator function
 
-        Raises:
-            ValueError: If agent_external_id is invalid
-
         Example:
-            @sdk.register_handler("alice")
-            async def handle_alice(message: T, context: MessageContext) -> Optional[T]:
-                print(f"Received: {message}")
+            @sdk.register_handler()
+            async def handle_message(message: T, context: MessageContext) -> Optional[T]:
+                print(f"Agent {context.recipient_id} received: {message}")
                 return {"response": "OK"}
         """
-        # Input validation
-        if not agent_external_id or not isinstance(agent_external_id, str):
-            raise ValueError("agent_external_id must be a non-empty string")
-        if len(agent_external_id.strip()) == 0:
-            raise ValueError("agent_external_id cannot be empty or whitespace")
+        logger.info("Registering global message handler")
+        return self._handler_registry.register
 
-        agent_external_id = agent_external_id.strip()
-
-        logger.info(f"Registering handler for agent: {agent_external_id}")
-        return self._handler_registry.register(agent_external_id)
-
-    def has_handler(self, agent_external_id: str) -> bool:
-        """Check if a handler is registered for an agent.
-
-        Args:
-            agent_external_id: External ID of the agent
+    def has_handler(self) -> bool:
+        """Check if a handler is registered.
 
         Returns:
             True if handler is registered
-
-        Raises:
-            ValueError: If agent_external_id is invalid
         """
-        # Input validation
-        if not agent_external_id or not isinstance(agent_external_id, str):
-            raise ValueError("agent_external_id must be a non-empty string")
-        if len(agent_external_id.strip()) == 0:
-            raise ValueError("agent_external_id cannot be empty or whitespace")
-
-        agent_external_id = agent_external_id.strip()
-
-        return self._handler_registry.has_handler(agent_external_id)
+        return self._handler_registry.has_handler()
 
     def register_event_handler(self, event_type: MeetingEventType):
         """Register an event handler for meeting events.
 
-        This decorator registers an async function to handle meeting events.
+        This decorator registers an async function to handle meeting events with type-safe data.
 
         Args:
             event_type: Type of meeting event to handle
@@ -318,9 +290,15 @@ class AgentMessaging(Generic[T]):
             ValueError: If event_type is invalid
 
         Example:
-            @sdk.register_event_handler(MeetingEvent.TURN_CHANGED)
-            async def on_turn_changed(event: MeetingEventPayload):
+            from agent_messaging.handlers import MeetingEvent
+            from agent_messaging.models import TurnChangedEventData
+
+            @sdk.register_event_handler(MeetingEventType.TURN_CHANGED)
+            async def on_turn_changed(event: MeetingEvent):
+                data: TurnChangedEventData = event.data
                 print(f"Turn changed in meeting {event.meeting_id}")
+                print(f"Previous speaker: {data.previous_speaker_id}")
+                print(f"Current speaker: {data.current_speaker_id}")
         """
         # Input validation
         if not isinstance(event_type, MeetingEventType):
@@ -391,23 +369,9 @@ class AgentMessaging(Generic[T]):
         )
 
     @property
-    def sync_conversation(self) -> "SyncConversation[T]":
-        """Get synchronous conversation messenger for request-response messaging."""
-        from .messaging.sync_conversation import SyncConversation
-
-        return SyncConversation[T](
-            handler_registry=self._handler_registry,
-            message_repo=self._message_repo,
-            session_repo=self._session_repo,
-            agent_repo=self._agent_repo,
-        )
-
-    @property
-    def async_conversation(self) -> "AsyncConversation[T]":
-        """Get asynchronous conversation messenger for queued messaging."""
-        from .messaging.async_conversation import AsyncConversation
-
-        return AsyncConversation[T](
+    def conversation(self) -> "Conversation[T]":
+        """Get unified conversation messenger for both sync and async messaging."""
+        return Conversation[T](
             handler_registry=self._handler_registry,
             message_repo=self._message_repo,
             session_repo=self._session_repo,

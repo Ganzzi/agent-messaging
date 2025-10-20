@@ -3,8 +3,56 @@ name = "agent-messaging"
 version = "0.1.0"
 description = "Python SDK for AI agent communication with messaging protocol"
 authors = ["Ganzzi <boinguyen9701@gmail.com>"]
+maintainers = ["Ganzzi <boinguyen9701@gmail.com>"]
 readme = "README.md"
+license = "MIT"
+homepage = "https://github.com/ganzzi/agent-messaging"
+repository = "https://github.com/ganzzi/agent-messaging"
+documentation = "https://agent-messaging.readthedocs.io/"
+keywords = [
+    "ai",
+    "agents",
+    "messaging",
+    "communication",
+    "async",
+    "postgresql",
+    "sdk",
+    "conversations",
+    "meetings",
+    "one-way",
+    "synchronous",
+    "asynchronous"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
 packages = [{include = "agent_messaging"}]
+include = [
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+]
+exclude = [
+    "tests/",
+    "docs/",
+    "examples/",
+    ".github/",
+    ".env*",
+    "*.pyc",
+    "__pycache__/",
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"

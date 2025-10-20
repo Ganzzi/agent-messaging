@@ -130,14 +130,14 @@ class TestConfig:
     @patch.dict(
         os.environ,
         {
-            "DATABASE__HOST": "env.host",
-            "DATABASE__PORT": "5433",
-            "DATABASE__USER": "env_user",
-            "DATABASE__PASSWORD": "env_pass",
-            "DATABASE__DATABASE": "env_db",
-            "DATABASE__MAX_POOL_SIZE": "15",
-            "MESSAGING__DEFAULT_SYNC_TIMEOUT": "20.0",
-            "MESSAGING__DEFAULT_MEETING_TURN_DURATION": "90.0",
+            "POSTGRES_HOST": "env.host",
+            "POSTGRES_PORT": "5433",
+            "POSTGRES_USER": "env_user",
+            "POSTGRES_PASSWORD": "env_pass",
+            "POSTGRES_DATABASE": "env_db",
+            "POSTGRES_MAX_POOL_SIZE": "15",
+            "MESSAGING_DEFAULT_SYNC_TIMEOUT": "20.0",
+            "MESSAGING_DEFAULT_MEETING_TURN_DURATION": "90.0",
             "DEBUG": "true",
             "LOG_LEVEL": "WARNING",
         },
@@ -185,13 +185,6 @@ class TestConfig:
         # The Config class should have env_file set
         assert hasattr(config.Config, "env_file")
         assert config.Config.env_file == ".env"
-
-    def test_nested_delimiter(self):
-        """Test that nested delimiter is configured."""
-        config = Config()
-        # Should have env_nested_delimiter for nested settings
-        assert hasattr(config.Config, "env_nested_delimiter")
-        # This allows POSTGRES__HOST to map to database.host
 
     def test_config_mutability(self):
         """Test that config objects are mutable (Pydantic default behavior)."""

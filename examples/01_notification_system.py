@@ -37,16 +37,20 @@ async def main():
         await sdk.register_agent("admin", "company", "Administrator")
         await sdk.register_agent("developer", "company", "Developer")
 
-        # Register handlers
-        @sdk.register_handler("admin")
-        async def admin_handler(notification: Notification, context):
-            logger.info(f"ADMIN ALERT: {notification.title} - {notification.message}")
-            if notification.priority == "urgent":
-                logger.warning("URGENT: Immediate attention required!")
-
-        @sdk.register_handler("developer")
-        async def developer_handler(notification: Notification, context):
-            logger.info(f"DEV NOTIFICATION: {notification.title} - {notification.message}")
+        # Register global handler for all agents
+        @sdk.register_handler()
+        async def global_handler(notification: Notification, context):
+            # Route messages based on recipient
+            if context.recipient_external_id == "admin":
+                logger.info(f"ADMIN ALERT: {notification.title} - {notification.message}")
+                if notification.priority == "urgent":
+                    logger.warning("URGENT: Immediate attention required!")
+            elif context.recipient_external_id == "developer":
+                logger.info(f"DEV NOTIFICATION: {notification.title} - {notification.message}")
+            else:
+                logger.info(
+                    f"UNKNOWN RECIPIENT {context.recipient_external_id}: {notification.title} - {notification.message}"
+                )
 
         # Send various notifications
         logger.info("Sending notifications...")

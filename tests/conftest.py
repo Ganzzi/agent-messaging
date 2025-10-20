@@ -34,8 +34,7 @@ from agent_messaging.models import (
 )
 from agent_messaging.utils.locks import SessionLock
 from agent_messaging.messaging.one_way import OneWayMessenger
-from agent_messaging.messaging.sync_conversation import SyncConversation
-from agent_messaging.messaging.async_conversation import AsyncConversation
+from agent_messaging.messaging.conversation import Conversation
 from agent_messaging.messaging.meeting import MeetingManager
 
 
@@ -48,10 +47,10 @@ def test_config() -> Config:
     os.environ.setdefault("POSTGRES_PORT", "5433")
     os.environ.setdefault("POSTGRES_USER", "postgres")
     os.environ.setdefault("POSTGRES_PASSWORD", "postgres")
-    os.environ.setdefault("POSTGRES_DB", "agent_messaging_test")
+    os.environ.setdefault("POSTGRES_DATABASE", "agent_messaging_test")
     os.environ.setdefault("POSTGRES_MAX_POOL_SIZE", "5")
-    os.environ.setdefault("DEFAULT_SYNC_TIMEOUT", "5.0")
-    os.environ.setdefault("DEFAULT_MEETING_TURN_DURATION", "10.0")
+    os.environ.setdefault("MESSAGING__DEFAULT_SYNC_TIMEOUT", "5.0")
+    os.environ.setdefault("MESSAGING__DEFAULT_MEETING_TURN_DURATION", "10.0")
 
     return Config()
 

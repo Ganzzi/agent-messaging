@@ -69,12 +69,12 @@ async def task_submitter(sdk: AgentMessaging):
         logger.info(f"Task Submitter: Submitting {task.task_id} ({task.task_type})")
 
         # Send task asynchronously (non-blocking)
-        conversation_id = await sdk.async_conversation.send(
+        await sdk.conversation.send_no_wait(
             sender_external_id="submitter", recipient_external_id="worker", message=task
         )
 
-        submitted_tasks.append((task.task_id, conversation_id))
-        logger.info(f"Task Submitter: {task.task_id} submitted, conversation: {conversation_id}")
+        submitted_tasks.append(task.task_id)
+        logger.info(f"Task Submitter: {task.task_id} submitted")
 
     # Wait a bit for processing
     logger.info("Task Submitter: Waiting for processing...")
@@ -82,7 +82,7 @@ async def task_submitter(sdk: AgentMessaging):
 
     # Check for results
     logger.info("Task Submitter: Checking for results...")
-    results = await sdk.async_conversation.get_unread_messages("submitter")
+    results = await sdk.conversation.get_unread_messages("submitter")
 
     logger.info(f"Task Submitter: Received {len(results)} result messages")
 
@@ -101,43 +101,6 @@ async def task_worker(sdk: AgentMessaging):
     """Agent that processes tasks asynchronously."""
     logger.info("Task Worker: Ready to process tasks")
 
-    # Register handler for task requests
-    @sdk.register_handler("worker")
-    async def worker_handler(task: TaskRequest, context):
-        logger.info(f"Task Worker: Received task {task.task_id} ({task.task_type})")
-
-        # Simulate processing time based on task type
-        if task.task_type == "data_analysis":
-            processing_time = 1.0
-            result_data = {"sum": sum(task.data["numbers"])}
-        elif task.task_type == "text_summary":
-            processing_time = 2.0
-            result_data = {"summary": f"Summary of {len(task.data['text'])} characters"}
-        elif task.task_type == "image_processing":
-            processing_time = 1.5
-            result_data = {"processed_url": "https://example.com/processed_image.jpg"}
-        else:
-            processing_time = 0.5
-            result_data = {"error": "Unknown task type"}
-
-        # Simulate processing
-        await asyncio.sleep(processing_time)
-
-        # Create result
-        result = TaskResult(
-            task_id=task.task_id,
-            status="completed",
-            result=result_data,
-            processing_time=processing_time,
-        )
-
-        # Send result back asynchronously
-        await sdk.async_conversation.send(
-            sender_external_id="worker", recipient_external_id="submitter", message=result
-        )
-
-        logger.info(f"Task Worker: Completed task {task.task_id} in {processing_time:.2f}s")
-
 
 async def main():
     """Run the task processing example."""
@@ -150,6 +113,57 @@ async def main():
         # Register agents
         await sdk.register_agent("submitter", "processing_co", "Task Submitter")
         await sdk.register_agent("worker", "processing_co", "Task Worker")
+
+        # Register global handler for all agents
+        @sdk.register_handler()
+        async def global_handler(message, context):
+            # Route based on recipient and message type
+            if context.recipient_external_id == "worker":
+                if isinstance(message, TaskRequest):
+                    logger.info(
+                        f"Task Worker: Received task {message.task_id} ({message.task_type})"
+                    )
+
+                    # Simulate processing time based on task type
+                    if message.task_type == "data_analysis":
+                        processing_time = 1.0
+                        result_data = {"sum": sum(message.data["numbers"])}
+                    elif message.task_type == "text_summary":
+                        processing_time = 2.0
+                        result_data = {
+                            "summary": f"Summary of {len(message.data['text'])} characters"
+                        }
+                    elif message.task_type == "image_processing":
+                        processing_time = 1.5
+                        result_data = {"processed_url": "https://example.com/processed_image.jpg"}
+                    else:
+                        processing_time = 0.5
+                        result_data = {"error": "Unknown task type"}
+
+                    # Simulate processing
+                    await asyncio.sleep(processing_time)
+
+                    # Create result
+                    result = TaskResult(
+                        task_id=message.task_id,
+                        status="completed",
+                        result=result_data,
+                        processing_time=processing_time,
+                    )
+
+                    # Send result back asynchronously
+                    await sdk.conversation.send_no_wait(
+                        sender_external_id="worker",
+                        recipient_external_id="submitter",
+                        message=result,
+                    )
+
+                    logger.info(
+                        f"Task Worker: Completed task {message.task_id} in {processing_time:.2f}s"
+                    )
+            elif context.recipient_external_id == "submitter":
+                # Submitter receives results but doesn't need special handling in this example
+                pass
 
         # Start both agents concurrently
         await asyncio.gather(task_submitter(sdk), task_worker(sdk))

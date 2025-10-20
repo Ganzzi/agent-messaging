@@ -341,7 +341,83 @@
 
 ---
 
-### Phase 10: Packaging & Distribution ✓
+
+### Phase 10: Major Refactoring (Architecture Improvements)
+**Estimated Time:** 5-6 days
+**Status:** In Progress
+
+This phase implements major architectural improvements based on practical usage and design feedback.
+
+#### 10.1 Database Layer Refactoring
+- [ ] Update PostgreSQLManager to add connection() context manager
+- [ ] Refactor BaseRepository to receive db_manager instead of pool
+- [ ] Use only execute() method pattern (remove fetch, fetch_val, fetch_row)
+- [ ] Update all repository implementations (agent, organization, message, session, meeting)
+- [ ] Update client and all repository instantiations
+
+**Rationale:** Simplifies database access pattern, improves consistency, follows best practices from postgresql_manager_example.md
+
+#### 10.2 Handler Registry Simplification
+- [ ] Change handler registration from per-agent to shared across all agents
+- [ ] Update HandlerRegistry.register() to accept handler name instead of agent_external_id
+- [ ] Update AgentMessaging.register_handler() API
+- [ ] Migrate from agent-specific handlers to organization/role-based handlers
+- [ ] Update all tests and examples
+
+**Rationale:** In practice, all agents of the same type share the same handler logic. Registering per-agent is redundant and error-prone.
+
+#### 10.3 Type-Safe Event Models
+- [ ] Create event-specific Pydantic models (MeetingStartedEvent, TurnChangedEvent, etc.)
+- [ ] Update MeetingEventPayload to use union of specific event models
+- [ ] Refactor MeetingEventHandler.emit_* methods to use typed models
+- [ ] Update event handler signatures to receive specific event types
+- [ ] Update all event-related tests
+
+**Rationale:** Replace Dict[str, Any] with strongly-typed models for better type safety and IDE support.
+
+#### 10.4 OneWayMessenger: One-to-Many Pattern
+- [ ] Update OneWayMessenger.send() to accept List[str] for recipient_external_ids
+- [ ] Implement batch message creation for multiple recipients
+- [ ] Invoke handlers for all recipients concurrently
+- [ ] Update error handling for partial failures
+- [ ] Update tests to verify one-to-many sending
+
+**Rationale:** Notifications often need to go to multiple recipients. Current one-to-one pattern requires loops.
+
+#### 10.5 Unified Conversation Class
+- [ ] Create new Conversation class merging SyncConversation and AsyncConversation
+- [ ] Implement send_and_wait(timeout) → Message (blocking)
+- [ ] Implement send_no_wait() → None (non-blocking)
+- [ ] Implement end_conversation() → None
+- [ ] Implement get_unread_messages() → List[Message]
+- [ ] Implement get_or_wait_for_response(timeout) → Message (conditional blocking)
+- [ ] Implement resume_agent_handler() for system recovery
+- [ ] Manage session state transitions intelligently
+- [ ] Handle both waiting agents and message queues
+- [ ] Remove old SyncConversation and AsyncConversation classes
+- [ ] Update AgentMessaging to expose single conversation property
+- [ ] Update all conversation tests
+- [ ] Update examples 02 and 03
+
+**Rationale:** Having separate classes for sync/async is confusing. Real conversations mix blocking and non-blocking patterns. Single unified class with flexible methods is more intuitive.
+
+**Key Design Points:**
+- Session can have one agent waiting or both polling unread messages
+- send_and_wait locks caller until response, timeout, or end_conversation
+- send_no_wait adds message to queue and optionally wakes waiting agent
+- get_or_wait_for_response checks queue first, then waits if empty
+- Smart handler invocation: call on first message or when agent resumes
+
+#### 10.6 Integration and Testing
+- [ ] Update all tests to work with new architecture
+- [ ] Run full test suite with PostgreSQL
+- [ ] Update all examples
+- [ ] Update API documentation
+- [ ] Performance testing with new patterns
+
+---
+
+### Phase 11: Packaging & Distribution ✓
 **Estimated Time:** 2 days
 
 #### 10.1 Package Configuration
@@ -453,11 +529,11 @@ Week 8:     Documentation, Examples, Packaging
 
 ## Next Steps
 
-1. **Review this plan** with stakeholders
-2. **Refine requirements** based on feedback
-3. **Start Phase 1** with project setup
-4. **Daily standups** to track progress
-5. **Weekly demos** of completed features
+1. **Complete Phase 10** refactoring changes
+2. **Validate all tests** pass with new architecture
+3. **Update documentation** to reflect new API design
+4. **Gather feedback** from early users
+5. **Prepare for Phase 11** - Final packaging and release
 
 ---
 
@@ -467,3 +543,4 @@ Week 8:     Documentation, Examples, Packaging
 - Consider pair programming for complex locking mechanisms
 - Prototype critical features (locking, timeouts) early
 - Maintain comprehensive logs for debugging distributed agent interactions
+- Phase 10 represents a significant architectural improvement based on practical usage patterns

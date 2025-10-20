@@ -31,6 +31,7 @@ class SessionType(str, Enum):
 
     SYNC = "sync"
     ASYNC = "async"
+    CONVERSATION = "conversation"
 
 
 class SessionStatus(str, Enum):
@@ -180,8 +181,52 @@ class MessageContext(BaseModel):
     meeting_id: Optional[UUID] = None
 
 
+# ============================================================================
+# Meeting Event Data Models (Type-Safe)
+# ============================================================================
+
+
+class MeetingStartedEventData(BaseModel):
+    """Data for meeting started event."""
+
+    host_id: UUID
+    participant_ids: list[UUID]
+
+
+class MeetingEndedEventData(BaseModel):
+    """Data for meeting ended event."""
+
+    host_id: UUID
+
+
+class TurnChangedEventData(BaseModel):
+    """Data for turn changed event."""
+
+    previous_speaker_id: Optional[UUID] = None
+    current_speaker_id: Optional[UUID] = None
+
+
+class ParticipantJoinedEventData(BaseModel):
+    """Data for participant joined event."""
+
+    agent_id: UUID
+
+
+class ParticipantLeftEventData(BaseModel):
+    """Data for participant left event."""
+
+    agent_id: UUID
+
+
+class TimeoutOccurredEventData(BaseModel):
+    """Data for timeout occurred event."""
+
+    timed_out_agent_id: UUID
+    next_speaker_id: UUID
+
+
 class MeetingEventPayload(BaseModel):
-    """Payload for meeting events."""
+    """Payload for meeting events (deprecated - use specific event classes)."""
 
     meeting_id: UUID
     event_type: MeetingEventType

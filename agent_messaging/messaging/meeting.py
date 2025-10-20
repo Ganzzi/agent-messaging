@@ -68,6 +68,27 @@ class MeetingManager(Generic[T]):
         # Initialize event handler
         self._event_handler = event_handler or MeetingEventHandler()
 
+    def _serialize_content(self, message: T) -> Dict[str, Any]:
+        """Serialize message content to dict for JSONB storage.
+
+        Args:
+            message: Message content
+
+        Returns:
+            Dict representation of the message
+        """
+        if isinstance(message, dict):
+            return message
+        elif hasattr(message, "model_dump"):  # Pydantic model
+            return message.model_dump()
+        else:
+            # Try to convert to dict, fallback to wrapping
+            try:
+                return dict(message)
+            except (TypeError, ValueError):
+                # Wrap in dict if not convertible
+                return {"data": message}
+
         # Track active meetings and their locks
         self._meeting_locks: Dict[UUID, SessionLock] = {}
 

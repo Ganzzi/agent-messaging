@@ -18,15 +18,14 @@ from .exceptions import (
     MeetingError,
     TimeoutError,
 )
-from .messaging import OneWayMessenger, SyncConversation, AsyncConversation, MeetingManager
+from .messaging import OneWayMessenger, Conversation, MeetingManager
 from .utils import MeetingTimeoutManager
 
 __all__ = [
     "AgentMessaging",
     "Config",
     "OneWayMessenger",
-    "SyncConversation",
-    "AsyncConversation",
+    "Conversation",
     "MeetingManager",
     "MeetingTimeoutManager",
     "AgentMessagingError",

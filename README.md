@@ -2,9 +2,11 @@
 
 > A Python SDK for enabling AI agents to communicate like humans
 
+[![PyPI version](https://img.shields.io/pypi/v/agent-messaging.svg)](https://pypi.org/project/agent-messaging/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: Phase 9 Complete](https://img.shields.io/badge/Status-Phase%209%20Complete-green.svg)]()
+[![Status: v0.1.0 Released](https://img.shields.io/badge/Status-v0.1.0%20Released-brightgreen.svg)]()
+[![Tests: 134/134](https://img.shields.io/badge/Tests-134%2F134%20Passing-green.svg)]()
 
 **Agent Messaging Protocol** is a Python SDK that enables AI agents to communicate with each other using human-like messaging patterns. It supports synchronous and asynchronous conversations, one-way notifications, and multi-agent meetings with turn-based coordination.
 
@@ -218,7 +220,7 @@ final = await sdk.sync_conversation.send_and_wait(
 
 ## 🛠️ Development Status
 
-**Current Phase:** Phase 9 Complete - Documentation & Examples
+**Current Phase:** Phase 10 Complete - Major Refactoring Complete
 
 ### Implementation Timeline
 
@@ -230,10 +232,11 @@ Week 5-6:  Multi-Agent Meetings                       [Complete]
 Week 7:    Core API, Error Handling, Testing          [Complete]
 Week 8:    Testing & Quality Assurance                [Complete]
 Week 9:    Documentation & Examples                   [Complete]
-Week 10:   Packaging & Release                        [Ready]
+Week 10:   Major Refactoring (Architecture)           [Complete]
+Week 11:   Packaging & Release                        [Ready]
 ```
 
-**Estimated Completion:** 6-8 weeks from start
+**Estimated Completion:** 6-8 weeks from start (Phase 11 remaining)
 
 [See complete implementation plan →](docs/plan/00-implementation-plan.md)
 
@@ -394,9 +397,9 @@ To be determined (suggested: MIT or Apache 2.0)
 - **Documentation Pages:** 2000+ lines
 
 ---
+**Status:** Phase 10 Complete - Major Refactoring Complete
 
-**Status:** Phase 9 Complete - Documentation & Examples Complete
-
+**Next Step:** Phase 11 - Packaging & Release
 **Next Step:** Phase 10 - Packaging & Release
 
 ---

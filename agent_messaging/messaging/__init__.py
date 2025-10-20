@@ -1,8 +1,11 @@
 # Messaging classes for Agent Messaging Protocol
 
 from .one_way import OneWayMessenger
-from .sync_conversation import SyncConversation
-from .async_conversation import AsyncConversation
+from .conversation import Conversation
 from .meeting import MeetingManager
 
-__all__ = ["OneWayMessenger", "SyncConversation", "AsyncConversation", "MeetingManager"]
+__all__ = [
+    "OneWayMessenger",
+    "Conversation",
+    "MeetingManager",
+]
