@@ -36,8 +36,51 @@
 
 ### Installation
 
+### Configuration
+
+Agent Messaging supports three configuration patterns:
+
+**1. Direct Python Configuration (Recommended for PyPI users)**
+```python
+from agent_messaging import AgentMessaging, Config, DatabaseConfig, MessagingConfig
+
+config = Config(
+    database=DatabaseConfig(
+        host="localhost",
+        port=5432,
+        user="postgres",
+        password="mypassword",
+        database="agent_messaging"
+    ),
+    messaging=MessagingConfig(
+        default_sync_timeout=45.0,
+        default_meeting_turn_duration=120.0,
+        handler_timeout=60.0
+    ),
+    debug=True
+)
+
+async with AgentMessaging[dict](config=config) as sdk:
+    # Use SDK with custom config
+    pass
+```
+
+**2. Environment Variables (Recommended for Docker/K8s)**
 ```bash
-pip install agent-messaging
+export POSTGRES_HOST=postgres
+export POSTGRES_PASSWORD=secure_pass
+export DEBUG=false
+python your_app.py
+```
+
+**3. .env File (Convenient for local development)**
+```bash
+# Install dev dependencies for .env support
+pip install agent-messaging[dev]
+
+# Create .env file
+echo "POSTGRES_HOST=localhost" > .env
+echo "POSTGRES_PASSWORD=devpass" >> .env
 ```
 
 ### Basic Example

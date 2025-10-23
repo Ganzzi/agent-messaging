@@ -7,7 +7,7 @@ __email__ = "boinguyen9701@gmail.com"
 __license__ = "MIT"
 
 from .client import AgentMessaging
-from .config import Config
+from .config import Config, DatabaseConfig, MessagingConfig
 from .exceptions import (
     AgentMessagingError,
     AgentNotFoundError,

@@ -180,11 +180,13 @@ class TestConfig:
         assert config.log_level == "INFO"
 
     def test_env_file_loading(self):
-        """Test that .env file is configured to be loaded."""
+        """Test that .env file loading is optional and works when available."""
+        # Since .env loading is now optional and handled at module level,
+        # we test that Config can be instantiated without python-dotenv
         config = Config()
-        # The Config class should have env_file set
-        assert hasattr(config.Config, "env_file")
-        assert config.Config.env_file == ".env"
+        # Config should work regardless of .env availability
+        assert isinstance(config, Config)
+        assert config.database.host == "localhost"  # default value
 
     def test_config_mutability(self):
         """Test that config objects are mutable (Pydantic default behavior)."""

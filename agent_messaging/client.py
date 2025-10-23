@@ -32,6 +32,42 @@ class AgentMessaging(Generic[T]):
     This is the primary entry point for using the Agent Messaging Protocol SDK.
     It provides methods for managing organizations, agents, and messaging.
 
+    Supports three configuration patterns:
+
+    **Direct Python Configuration (Recommended for PyPI users):**
+    ```python
+    from agent_messaging import AgentMessaging, Config, DatabaseConfig
+
+    config = Config(
+        database=DatabaseConfig(host="prod-db", password="secret"),
+        debug=False
+    )
+    async with AgentMessaging[dict](config=config) as sdk:
+        # Use with custom config
+        pass
+    ```
+
+    **Environment Variables (Recommended for Docker/K8s):**
+    ```bash
+    export POSTGRES_HOST=postgres
+    export POSTGRES_PASSWORD=secure_pass
+    python app.py
+    ```
+    ```python
+    async with AgentMessaging[dict]() as sdk:  # Uses env vars
+        pass
+    ```
+
+    **.env File (Convenient for local development):**
+    ```bash
+    pip install agent-messaging[dev]  # For .env support
+    echo "POSTGRES_HOST=localhost" > .env
+    ```
+    ```python
+    async with AgentMessaging[dict]() as sdk:  # Loads .env automatically
+        pass
+    ```
+
     Example:
         async with AgentMessaging[dict]() as sdk:
             await sdk.register_organization("org_001", "My Organization")
@@ -48,7 +84,9 @@ class AgentMessaging(Generic[T]):
         """Initialize the SDK.
 
         Args:
-            config: Optional configuration. If not provided, loads from .env
+            config: Optional configuration. If not provided, uses environment variables
+                   or .env file (if python-dotenv is available). For direct configuration,
+                   pass a Config instance.
         """
         self.config = config or Config()
         self._db_manager = PostgreSQLManager(self.config.database)
