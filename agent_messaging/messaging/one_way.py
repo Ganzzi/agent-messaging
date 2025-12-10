@@ -3,12 +3,13 @@
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, Generic, List, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 from ..database.repositories.agent import AgentRepository
 from ..database.repositories.message import MessageRepository
 from ..exceptions import AgentNotFoundError, NoHandlerRegisteredError
 from ..handlers.registry import HandlerRegistry
+from ..handlers.types import HandlerContext
 from ..models import MessageContext, MessageType
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ class OneWayMessenger(Generic[T]):
         sender_external_id: str,
         recipient_external_ids: List[str],
         message: T,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         """Send a one-way message to multiple recipients.
 
@@ -77,6 +79,7 @@ class OneWayMessenger(Generic[T]):
             sender_external_id: External ID of sender agent
             recipient_external_ids: List of recipient external IDs
             message: Message to send to all recipients
+            metadata: Optional custom metadata to attach (for tracking, filtering, etc.)
 
         Returns:
             List of message IDs (UUIDs as strings) - one per recipient
@@ -90,7 +93,8 @@ class OneWayMessenger(Generic[T]):
             message_ids = await sdk.one_way.send(
                 "notification_service",
                 ["alice", "bob", "charlie"],
-                {"type": "system_update", "message": "Server maintenance at 3 AM"}
+                {"type": "system_update", "message": "Server maintenance at 3 AM"},
+                metadata={"priority": "high", "request_id": "req-123"}
             )
         """
         # Input validation
@@ -144,6 +148,7 @@ class OneWayMessenger(Generic[T]):
                 recipient_id=recipient.id,
                 content=content_dict,
                 message_type=MessageType.USER_DEFINED,
+                metadata=metadata or {},
             )
 
             # Create message context
@@ -155,9 +160,12 @@ class OneWayMessenger(Generic[T]):
             )
 
             # Invoke handler asynchronously (fire-and-forget)
+            # Uses type-based routing: tries agent-specific handler first, falls back to global
             self._handler_registry.invoke_handler_async(
                 message,
                 context,
+                agent_external_id=recipient_external_id,
+                handler_context=HandlerContext.ONE_WAY,
             )
 
             message_ids.append(str(message_id))

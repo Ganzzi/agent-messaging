@@ -18,6 +18,7 @@ from ..exceptions import (
     TimeoutError,
 )
 from ..handlers.registry import HandlerRegistry
+from ..handlers.types import HandlerContext
 from ..models import MessageContext, MessageType, SessionStatus
 from ..utils.locks import SessionLock
 
@@ -104,6 +105,7 @@ class Conversation(Generic[T]):
         recipient_external_id: str,
         message: T,
         timeout: float = 30.0,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> T:
         """Send a message and wait for response (blocking).
 
@@ -115,6 +117,7 @@ class Conversation(Generic[T]):
             recipient_external_id: External ID of recipient agent
             message: Message to send
             timeout: Maximum seconds to wait for response
+            metadata: Optional custom metadata to attach (for tracking, filtering, etc.)
 
         Returns:
             Response message from recipient
@@ -130,7 +133,8 @@ class Conversation(Generic[T]):
                 "alice",
                 "support_agent",
                 SupportQuery(question="How do I reset password?"),
-                timeout=60.0
+                timeout=60.0,
+                metadata={"request_id": "req-123", "priority": "high"}
             )
         """
         # Input validation
@@ -192,106 +196,169 @@ class Conversation(Generic[T]):
         # Create session lock
         session_lock = SessionLock(session.id)
 
-        # Acquire lock for this session (blocks until acquired)
+        # CRITICAL FIX: Use single connection scope for lock acquire/release
+        # PostgreSQL advisory locks are connection-scoped, so we must acquire and
+        # release on the SAME connection to avoid lock leaks
         async with self._message_repo.db_manager.connection() as connection:
+            # Acquire lock for this session
             lock_acquired = await session_lock.acquire(connection)
             if not lock_acquired:
-                raise RuntimeError(f"Failed to acquire lock for session {session.id}")
+                raise SessionLockError(f"Failed to acquire lock for session {session.id}")
 
-        try:
-            # Set sender as locked agent
-            await self._session_repo.set_locked_agent(session.id, sender.id)
-
-            # Create waiting event for response
-            event = asyncio.Event()
-            self._waiting_events[session.id] = event
-
-            # Serialize message content
-            content_dict = self._serialize_content(message)
-
-            # Store request message
-            message_id = await self._message_repo.create(
-                sender_id=sender.id,
-                recipient_id=recipient.id,
-                session_id=session.id,
-                content=content_dict,
-                message_type=MessageType.USER_DEFINED,
-            )
-
-            # Create message context
-            context = MessageContext(
-                sender_id=sender_external_id,
-                recipient_id=recipient_external_id,
-                message_id=message_id,
-                timestamp=datetime.now(),
-                session_id=session.id,
-            )
-
-            # Invoke recipient handler asynchronously
-            self._handler_registry.invoke_handler_async(
-                message,
-                context,
-            )
-
-            # Check for immediate response (handler might have sent a reply synchronously)
-            immediate_responses = await self._message_repo.get_unread_messages_from_sender(
-                sender.id, recipient.id
-            )
-            if immediate_responses:
-                # Mark as read and return the first response
-                await self._message_repo.mark_as_read(immediate_responses[0].id)
-                content = self._deserialize_content(immediate_responses[0].content)
-                # Clean up
-                await self._session_repo.set_locked_agent(session.id, None)
-                async with self._message_repo.db_manager.connection() as connection:
-                    await session_lock.release(connection)
-                return content
-
-            # Wait for response with timeout
             try:
-                await asyncio.wait_for(event.wait(), timeout=timeout)
+                # Set sender as locked agent
+                await self._session_repo.set_locked_agent(session.id, sender.id)
 
-                # Get response - first check _waiting_responses (for backward compatibility)
-                if session.id in self._waiting_responses:
-                    response = self._waiting_responses[session.id]
-                    # Clean up
-                    del self._waiting_events[session.id]
-                    del self._waiting_responses[session.id]
-                    return response
-                else:
-                    # Check for response messages from recipient
-                    response_messages = await self._message_repo.get_unread_messages_from_sender(
-                        sender.id, recipient.id
+                # Create waiting event for response
+                event = asyncio.Event()
+                self._waiting_events[session.id] = event
+
+                # Serialize message content
+                content_dict = self._serialize_content(message)
+
+                # Store request message
+                message_id = await self._message_repo.create(
+                    sender_id=sender.id,
+                    recipient_id=recipient.id,
+                    session_id=session.id,
+                    content=content_dict,
+                    message_type=MessageType.USER_DEFINED,
+                    metadata=metadata or {},
+                )
+
+                # Create message context
+                context = MessageContext(
+                    sender_id=sender_external_id,
+                    recipient_id=recipient_external_id,
+                    message_id=message_id,
+                    timestamp=datetime.now(),
+                    session_id=session.id,
+                )
+
+                # Invoke recipient handler and capture response
+                try:
+                    # Try to get handler response with short timeout (non-blocking)
+                    # Uses type-based routing: tries agent-specific handler first
+                    handler_response = await asyncio.wait_for(
+                        self._handler_registry.invoke_handler(
+                            message,
+                            context,
+                            agent_external_id=recipient_external_id,
+                            handler_context=HandlerContext.CONVERSATION,
+                        ),
+                        timeout=0.1,  # 100ms timeout for immediate responses
                     )
-                    if response_messages:
-                        # Mark as read and return the first response
-                        await self._message_repo.mark_as_read(response_messages[0].id)
-                        content = self._deserialize_content(response_messages[0].content)
+
+                    # If handler returned a response, auto-send it
+                    if handler_response is not None:
+                        # Serialize handler response
+                        response_content_dict = self._serialize_content(handler_response)
+
+                        # Store response message from recipient to sender
+                        response_message_id = await self._message_repo.create(
+                            session_id=session.id,
+                            sender_id=recipient.id,
+                            recipient_id=sender.id,
+                            content=response_content_dict,
+                            message_type=MessageType.USER_DEFINED,
+                        )
+
+                        # Mark response as read (since we're returning it immediately)
+                        await self._message_repo.mark_as_read(response_message_id)
+
+                        # Clean up session lock
+                        await self._session_repo.set_locked_agent(session.id, None)
+
+                        # Release lock on same connection
+                        await session_lock.release(connection)
+
+                        logger.info(
+                            f"Handler returned immediate response, auto-sent message {response_message_id}"
+                        )
+                        return handler_response
+
+                except asyncio.TimeoutError:
+                    # Handler didn't respond immediately, invoke asynchronously
+                    self._handler_registry.invoke_handler_async(
+                        message,
+                        context,
+                        agent_external_id=recipient_external_id,
+                        handler_context=HandlerContext.CONVERSATION,
+                    )
+                    logger.debug(f"Handler invoked asynchronously for message {message_id}")
+                except Exception as e:
+                    # Handler error - log and continue waiting for manual response
+                    logger.error(f"Handler error for message {message_id}: {e}", exc_info=True)
+                    # Still invoke async in case handler wants to retry
+                    self._handler_registry.invoke_handler_async(
+                        message,
+                        context,
+                        agent_external_id=recipient_external_id,
+                        handler_context=HandlerContext.CONVERSATION,
+                    )
+
+                # Check for immediate response (handler might have sent a reply synchronously)
+                immediate_responses = await self._message_repo.get_unread_messages_from_sender(
+                    sender.id, recipient.id
+                )
+                if immediate_responses:
+                    # Mark as read and return the first response
+                    await self._message_repo.mark_as_read(immediate_responses[0].id)
+                    content = self._deserialize_content(immediate_responses[0].content)
+                    # Clean up
+                    await self._session_repo.set_locked_agent(session.id, None)
+                    # Release lock on same connection
+                    await session_lock.release(connection)
+                    return content
+
+                # Wait for response with timeout
+                try:
+                    await asyncio.wait_for(event.wait(), timeout=timeout)
+
+                    # Get response - first check _waiting_responses (for backward compatibility)
+                    if session.id in self._waiting_responses:
+                        response = self._waiting_responses[session.id]
                         # Clean up
                         del self._waiting_events[session.id]
-                        return content
+                        del self._waiting_responses[session.id]
+                        return response
                     else:
-                        raise RuntimeError("Response event received but no response found")
+                        # Check for response messages from recipient
+                        response_messages = (
+                            await self._message_repo.get_unread_messages_from_sender(
+                                sender.id, recipient.id
+                            )
+                        )
+                        if response_messages:
+                            # Mark as read and return the first response
+                            await self._message_repo.mark_as_read(response_messages[0].id)
+                            content = self._deserialize_content(response_messages[0].content)
+                            # Clean up
+                            del self._waiting_events[session.id]
+                            return content
+                        else:
+                            raise RuntimeError("Response event received but no response found")
 
-            except asyncio.TimeoutError:
-                # Clean up on timeout
-                if session.id in self._waiting_events:
-                    del self._waiting_events[session.id]
-                if session.id in self._waiting_responses:
-                    del self._waiting_responses[session.id]
-                raise TimeoutError(f"No response received within {timeout} seconds")
+                except asyncio.TimeoutError:
+                    # Clean up on timeout
+                    if session.id in self._waiting_events:
+                        del self._waiting_events[session.id]
+                    if session.id in self._waiting_responses:
+                        del self._waiting_responses[session.id]
+                    raise TimeoutError(f"No response received within {timeout} seconds")
 
-        finally:
-            # Always release lock and clear locked agent
-            async with self._message_repo.db_manager.connection() as connection:
+            finally:
+                # Always release lock and clear locked agent
+                # Lock is released on the SAME connection it was acquired on
                 await session_lock.release(connection)
-            await self._session_repo.set_locked_agent(session.id, None)
+                await self._session_repo.set_locked_agent(session.id, None)
 
     async def send_no_wait(
         self,
         sender_external_id: str,
         recipient_external_id: str,
         message: T,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Send a message asynchronously (non-blocking).
 
@@ -302,6 +369,7 @@ class Conversation(Generic[T]):
             sender_external_id: External ID of sender agent
             recipient_external_id: External ID of recipient agent
             message: Message to send
+            metadata: Optional custom metadata to attach (for tracking, filtering, etc.)
 
         Raises:
             ValueError: If parameters are invalid
@@ -311,7 +379,8 @@ class Conversation(Generic[T]):
             await sdk.conversation.send_no_wait(
                 "alice",
                 "bob",
-                ChatMessage(text="Hello Bob!")
+                ChatMessage(text="Hello Bob!"),
+                metadata={"message_type": "greeting"}
             )
             # Alice continues immediately
         """
@@ -360,6 +429,7 @@ class Conversation(Generic[T]):
             session_id=session.id,
             content=content_dict,
             message_type=MessageType.USER_DEFINED,
+            metadata=metadata or {},
         )
 
         # Create message context
@@ -376,6 +446,8 @@ class Conversation(Generic[T]):
             self._handler_registry.invoke_handler_async(
                 message,
                 context,
+                agent_external_id=recipient_external_id,
+                handler_context=HandlerContext.CONVERSATION,
             )
 
         # Wake any waiting agent for this session
@@ -458,6 +530,8 @@ class Conversation(Generic[T]):
             self._handler_registry.invoke_handler_async(
                 ending_content,  # This might need adjustment based on handler expectations
                 context,
+                agent_external_id=agent_external_id,
+                handler_context=HandlerContext.CONVERSATION,
             )
 
         # Send to agent2 if handler is registered
@@ -479,6 +553,8 @@ class Conversation(Generic[T]):
             self._handler_registry.invoke_handler_async(
                 ending_content,  # This might need adjustment based on handler expectations
                 context,
+                agent_external_id=other_agent_external_id,
+                handler_context=HandlerContext.CONVERSATION,
             )
 
         logger.info(f"Conversation ended: {session.id}")
@@ -721,6 +797,8 @@ class Conversation(Generic[T]):
             self._handler_registry.invoke_handler_async(
                 content,
                 context,
+                agent_external_id=agent_external_id,
+                handler_context=HandlerContext.CONVERSATION,
             )
 
             # Mark message as read (processed)
@@ -729,3 +807,282 @@ class Conversation(Generic[T]):
         logger.info(
             f"Resumed agent {agent_external_id} with {len(pending_messages)} pending messages"
         )
+
+    async def get_active_sessions(
+        self,
+        agent_external_id: str,
+    ) -> List[Dict[str, Any]]:
+        """Get all active sessions for an agent.
+
+        Returns a list of all active (non-ended) conversation sessions that the agent
+        is participating in, along with basic information about each session.
+
+        Args:
+            agent_external_id: External ID of the agent
+
+        Returns:
+            List of active sessions as dictionaries with the following fields:
+            - session_id: UUID of the session
+            - other_agent_id: External ID of the other participant
+            - other_agent_name: Name of the other participant
+            - status: Session status (ACTIVE, WAITING, ENDED)
+            - created_at: When the session was created
+            - locked_by: External ID of agent holding the lock (if any)
+
+        Raises:
+            ValueError: If agent_external_id is invalid
+            AgentNotFoundError: If agent doesn't exist
+
+        Example:
+            sessions = await sdk.conversation.get_active_sessions("alice")
+            for session in sessions:
+                print(f"Session with {session['other_agent_name']}: {session['session_id']}")
+        """
+        # Input validation
+        if not agent_external_id or not isinstance(agent_external_id, str):
+            raise ValueError("agent_external_id must be a non-empty string")
+        if len(agent_external_id.strip()) == 0:
+            raise ValueError("agent_external_id cannot be empty or whitespace")
+
+        agent_external_id = agent_external_id.strip()
+
+        logger.info(f"Getting active sessions for {agent_external_id}")
+
+        # Validate agent exists
+        agent = await self._agent_repo.get_by_external_id(agent_external_id)
+        if not agent:
+            raise AgentNotFoundError(f"Agent not found: {agent_external_id}")
+
+        # Get all sessions for this agent (both as agent_a and agent_b)
+        all_sessions = await self._session_repo.get_agent_sessions(agent.id)
+
+        # Filter for active sessions and build response with other agent info
+        active_sessions = []
+        for session in all_sessions:
+            # Skip ended sessions
+            if session.status != SessionStatus.ACTIVE:
+                continue
+
+            # Determine the other agent ID
+            other_agent_id = (
+                session.agent_b_id if session.agent_a_id == agent.id else session.agent_a_id
+            )
+
+            # Get other agent's details
+            other_agent = await self._agent_repo.get_by_id(other_agent_id)
+            if not other_agent:
+                logger.warning(f"Other agent not found for session {session.id}")
+                continue
+
+            # Get locked agent details if lock is held
+            locked_by = None
+            if session.locked_agent_id:
+                locked_agent = await self._agent_repo.get_by_id(session.locked_agent_id)
+                if locked_agent:
+                    locked_by = locked_agent.external_id
+
+            active_sessions.append(
+                {
+                    "session_id": session.id,
+                    "other_agent_id": other_agent.external_id,
+                    "other_agent_name": other_agent.name,
+                    "status": session.status.value,
+                    "created_at": session.created_at,
+                    "locked_by": locked_by,
+                }
+            )
+
+        logger.info(f"Found {len(active_sessions)} active sessions for {agent_external_id}")
+        return active_sessions
+
+    async def get_messages_in_session(
+        self,
+        session_id: str,
+        include_read: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Get all messages in a specific conversation session.
+
+        Retrieves the complete message history for a session, with optional
+        filtering for unread messages only.
+
+        Args:
+            session_id: UUID of the session (can be passed as string or UUID)
+            include_read: If True, include read messages. If False, only unread.
+
+        Returns:
+            List of messages as dictionaries with the following fields:
+            - message_id: UUID of the message
+            - sender_id: External ID of the sender
+            - sender_name: Name of the sender
+            - message_type: Type of message (USER_DEFINED, SYSTEM, TIMEOUT, ENDING)
+            - content: Deserialized message content
+            - is_read: Whether message was read
+            - created_at: When message was sent
+
+        Raises:
+            ValueError: If session_id is invalid
+            AgentNotFoundError: If sender agent not found (logs warning but continues)
+
+        Example:
+            messages = await sdk.conversation.get_messages_in_session(
+                session_id="123e4567-e89b-12d3-a456-426614174000"
+            )
+            for msg in messages:
+                print(f"{msg['sender_name']}: {msg['content']}")
+
+        Example (unread only):
+            unread = await sdk.conversation.get_messages_in_session(
+                session_id=some_session_id,
+                include_read=False
+            )
+        """
+        # Input validation
+        if not session_id or not isinstance(session_id, str):
+            raise ValueError("session_id must be a non-empty string")
+
+        # Convert string to UUID
+        try:
+            session_uuid = UUID(session_id) if isinstance(session_id, str) else session_id
+        except (ValueError, TypeError):
+            raise ValueError(f"session_id is not a valid UUID: {session_id}")
+
+        logger.info(f"Getting messages for session {session_uuid}")
+
+        # Get messages for this session from repository
+        messages = await self._message_repo.get_messages_for_session(session_uuid)
+
+        # Build response with sender info and deserialized content
+        result_messages = []
+        for message in messages:
+            # Skip read messages if not included
+            if not include_read and message.read_at is not None:
+                continue
+
+            # Get sender details
+            sender = await self._agent_repo.get_by_id(message.sender_id)
+            if not sender:
+                logger.warning(f"Sender not found for message {message.id}")
+                continue
+
+            # Deserialize content
+            content = self._deserialize_content(message.content)
+
+            result_messages.append(
+                {
+                    "message_id": message.id,
+                    "sender_id": sender.external_id,
+                    "sender_name": sender.name,
+                    "message_type": message.message_type.value,
+                    "content": content,
+                    "is_read": message.read_at is not None,
+                    "created_at": message.created_at,
+                }
+            )
+
+        logger.info(f"Retrieved {len(result_messages)} messages for session {session_uuid}")
+        return result_messages
+
+    async def get_conversation_history(
+        self,
+        session_id: str,
+    ) -> List[Dict[str, Any]]:
+        """Get full conversation history with formatted message details.
+
+        Args:
+            session_id: Session ID (UUID as string)
+
+        Returns:
+            List of messages with full details (sender info, timestamp, content)
+        """
+        try:
+            session_uuid = UUID(session_id) if isinstance(session_id, str) else session_id
+        except (ValueError, TypeError):
+            raise ValueError(f"session_id is not a valid UUID: {session_id}")
+
+        history = await self._session_repo.get_conversation_history(session_uuid)
+
+        result = []
+        for item in history:
+            result.append(
+                {
+                    "message_id": str(item["id"]),
+                    "sender_id": item["sender_name"],
+                    "message_type": item["message_type"],
+                    "content": item["content"],
+                    "is_read": item["read_at"] is not None,
+                    "created_at": item["created_at"],
+                }
+            )
+
+        return result
+
+    async def get_session_info(
+        self,
+        session_id: str,
+    ) -> Dict[str, Any]:
+        """Get detailed session information including statistics.
+
+        Args:
+            session_id: Session ID (UUID as string)
+
+        Returns:
+            Dictionary with session details, participants, and message counts
+        """
+        try:
+            session_uuid = UUID(session_id) if isinstance(session_id, str) else session_id
+        except (ValueError, TypeError):
+            raise ValueError(f"session_id is not a valid UUID: {session_id}")
+
+        info = await self._session_repo.get_session_info(session_uuid)
+
+        if not info:
+            raise ValueError(f"Session not found: {session_id}")
+
+        return {
+            "session_id": str(info["id"]),
+            "agent_a": {
+                "id": str(info["agent_a_id"]),
+                "name": info["agent_a_name"],
+            },
+            "agent_b": {
+                "id": str(info["agent_b_id"]),
+                "name": info["agent_b_name"],
+            },
+            "status": info["status"],
+            "is_locked": info["locked_agent_id"] is not None,
+            "locked_by": str(info["locked_agent_id"]) if info["locked_agent_id"] else None,
+            "message_count": info["message_count"],
+            "read_count": info["read_count"],
+            "unread_count": info["message_count"] - (info["read_count"] or 0),
+            "created_at": info["created_at"],
+            "updated_at": info["updated_at"],
+            "ended_at": info["ended_at"],
+        }
+
+    async def get_session_statistics(
+        self,
+        agent_id: str,
+    ) -> Dict[str, Any]:
+        """Get message statistics for an agent across all sessions.
+
+        Args:
+            agent_id: Agent external ID
+
+        Returns:
+            Dictionary with conversation statistics
+        """
+        agent = await self._agent_repo.get_by_external_id(agent_id)
+        if not agent:
+            raise AgentNotFoundError(f"Agent not found: {agent_id}")
+
+        stats = await self._session_repo.get_session_statistics(agent.id)
+
+        return {
+            "agent_id": agent_id,
+            "total_conversations": stats["total_conversations"],
+            "total_messages": stats["total_messages"],
+            "unread_count": stats["unread_count"],
+            "sent_count": stats["sent_count"],
+            "received_count": stats["received_count"],
+            "unique_conversation_partners": stats["unique_senders"],
+        }

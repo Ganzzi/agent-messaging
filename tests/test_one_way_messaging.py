@@ -88,6 +88,7 @@ class TestOneWayMessenger:
             recipient_id=recipient.id,
             content={"text": "Hello!"},
             message_type=MessageType.USER_DEFINED,
+            metadata={},  # Phase 4: metadata parameter added
         )
 
         # Verify handler was invoked

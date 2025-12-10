@@ -118,7 +118,7 @@ async def handler(message: T, context: MessageContext) -> Optional[T]:
     pass
 ```
 
-**Note:** Phase 10 change - handlers are now registered globally and shared by all agents,
+**Note:** Handler system refactored - handlers are now registered globally and shared by all agents,
 rather than being registered per-agent. The handler receives the agent context in MessageContext.
 
 ```python
@@ -206,7 +206,7 @@ Send one-way message to multiple recipients (broadcast).
 
 **Raises:** AgentNotFoundError, NoHandlerRegisteredError
 
-**Phase 10 Change:** Updated to support one-to-many pattern. Handlers are invoked
+**Architecture Note:** Updated to support one-to-many pattern. Handlers are invoked
 concurrently for all recipients.
 
 ---
@@ -328,9 +328,108 @@ Resume agent handler for system recovery (process unread messages).
 
 **Raises:** AgentNotFoundError
 
-**Phase 10 Change:** Unified SyncConversation and AsyncConversation into single
+**Architecture Note:** Unified SyncConversation and AsyncConversation into single
 Conversation class. Sessions intelligently handle both blocking waits and message
 queues based on the method called.
+
+### Query Methods
+
+```python
+async def get_conversation_history(
+    session_id: str
+) -> List[Dict[str, Any]]
+```
+
+Get full conversation history with formatted message details.
+
+**Parameters:**
+- `session_id` (str): Session ID (UUID as string)
+
+**Returns:** List of messages with sender info, timestamps, and content
+
+**Raises:** ValueError
+
+**Example:**
+```python
+history = await sdk.conversation.get_conversation_history(session_id)
+for msg in history:
+    print(f"{msg['sender_id']}: {msg['content']}")
+```
+
+```python
+async def get_session_info(
+    session_id: str
+) -> Dict[str, Any]
+```
+
+Get detailed session information including statistics.
+
+**Parameters:**
+- `session_id` (str): Session ID (UUID as string)
+
+**Returns:** Dictionary with session details, participants, and message counts
+
+**Response Structure:**
+```python
+{
+    "session_id": str,
+    "agent_a": {"id": str, "name": str},
+    "agent_b": {"id": str, "name": str},
+    "status": str,
+    "is_locked": bool,
+    "locked_by": Optional[str],
+    "message_count": int,
+    "read_count": int,
+    "unread_count": int,
+    "created_at": datetime,
+    "updated_at": datetime,
+    "ended_at": Optional[datetime]
+}
+```
+
+**Raises:** ValueError
+
+**Example:**
+```python
+info = await sdk.conversation.get_session_info(session_id)
+print(f"Status: {info['status']}")
+print(f"Unread: {info['unread_count']}")
+```
+
+```python
+async def get_session_statistics(
+    agent_id: str
+) -> Dict[str, Any]
+```
+
+Get message statistics for an agent across all sessions.
+
+**Parameters:**
+- `agent_id` (str): Agent external ID
+
+**Returns:** Dictionary with conversation statistics
+
+**Response Structure:**
+```python
+{
+    "agent_id": str,
+    "total_conversations": int,
+    "total_messages": int,
+    "unread_count": int,
+    "sent_count": int,
+    "received_count": int,
+    "unique_conversation_partners": int
+}
+```
+
+**Raises:** AgentNotFoundError
+
+**Example:**
+```python
+stats = await sdk.conversation.get_session_statistics("alice")
+print(f"Alice has {stats['total_conversations']} conversations")
+print(f"Total messages sent: {stats['sent_count']}")
+```
 
 ---
 
@@ -348,6 +447,7 @@ MeetingManager[T](
     event_handler: MeetingEventHandler
 )
 ```
+
 
 ### Methods
 
@@ -482,6 +582,123 @@ Get meeting message history.
 **Returns:** List of message dictionaries
 
 **Raises:** MeetingNotFoundError
+
+### Query Methods
+
+```python
+async def get_meeting_details(
+    meeting_id: str
+) -> Dict[str, Any]
+```
+
+Get detailed meeting information including participants and statistics.
+
+**Parameters:**
+- `meeting_id` (str): Meeting ID (UUID as string)
+
+**Returns:** Dictionary with meeting details and current status
+
+**Response Structure:**
+```python
+{
+    "meeting_id": str,
+    "host": {"id": str, "name": str},
+    "status": str,
+    "current_speaker": Optional[{"id": str, "name": str}],
+    "turn_duration_seconds": Optional[float],
+    "turn_started_at": Optional[datetime],
+    "created_at": datetime,
+    "started_at": Optional[datetime],
+    "ended_at": Optional[datetime],
+    "participant_count": int,
+    "attending_count": int,
+    "message_count": int
+}
+```
+
+**Raises:** ValueError, MeetingNotFoundError
+
+**Example:**
+```python
+details = await sdk.meeting.get_meeting_details(meeting_id)
+print(f"Host: {details['host']['name']}")
+print(f"Status: {details['status']}")
+print(f"Participants: {details['participant_count']}")
+```
+
+```python
+async def get_participant_history(
+    meeting_id: str
+) -> List[Dict[str, Any]]
+```
+
+Get full participant history for a meeting.
+
+**Parameters:**
+- `meeting_id` (str): Meeting ID (UUID as string)
+
+**Returns:** List of participants with detailed information
+
+**Response Structure:**
+```python
+[
+    {
+        "participant_id": str,
+        "agent_id": str,
+        "agent_name": str,
+        "status": str,
+        "join_order": int,
+        "is_locked": bool,
+        "joined_at": Optional[datetime],
+        "left_at": Optional[datetime]
+    },
+    ...
+]
+```
+
+**Raises:** ValueError, MeetingNotFoundError
+
+**Example:**
+```python
+participants = await sdk.meeting.get_participant_history(meeting_id)
+for p in participants:
+    print(f"{p['agent_name']} (order: {p['join_order']})")
+```
+
+```python
+async def get_meeting_statistics(
+    agent_id: str
+) -> Dict[str, Any]
+```
+
+Get meeting statistics for an agent (as organizer or participant).
+
+**Parameters:**
+- `agent_id` (str): Agent external ID
+
+**Returns:** Dictionary with meeting statistics
+
+**Response Structure:**
+```python
+{
+    "agent_id": str,
+    "hosted_meetings": int,
+    "participated_meetings": int,
+    "active_hosted": int,
+    "total_messages_sent": int,
+    "meetings_spoke_in": int,
+    "avg_meeting_duration_seconds": Optional[float]
+}
+```
+
+**Raises:** AgentNotFoundError
+
+**Example:**
+```python
+stats = await sdk.meeting.get_meeting_statistics("alice")
+print(f"Hosted meetings: {stats['hosted_meetings']}")
+print(f"Avg duration: {stats['avg_meeting_duration_seconds']}s")
+```
 
 ---
 

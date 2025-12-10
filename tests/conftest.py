@@ -55,7 +55,7 @@ def test_config() -> Config:
 
 
 # Database Fixtures
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db_manager(test_config: Config) -> AsyncGenerator[PostgreSQLManager, None]:
     """Real database manager for integration tests."""
     manager = PostgreSQLManager(test_config.database)
@@ -76,7 +76,7 @@ def mock_db_manager() -> MagicMock:
     return manager
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def mock_connection() -> AsyncGenerator[MagicMock, None]:
     """Mock database connection."""
     connection = MagicMock()
@@ -255,7 +255,7 @@ def mock_handler_registry() -> MagicMock:
 
 
 # SDK Fixtures
-@pytest.fixture
+@pytest_asyncio.fixture
 async def sdk(
     test_config: Config, mock_db_manager: MagicMock
 ) -> AsyncGenerator[AgentMessaging, None]:
@@ -374,7 +374,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     loop.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def cleanup_tasks() -> AsyncGenerator[List[asyncio.Task], None]:
     """Fixture to track and cleanup background tasks."""
     tasks = []
@@ -402,13 +402,81 @@ def performance_config() -> Config:
 
 
 # E2E Test Fixtures
-@pytest.fixture
+@pytest_asyncio.fixture
 async def e2e_sdk(
     test_config: Config, db_manager: PostgreSQLManager
 ) -> AsyncGenerator[AgentMessaging, None]:
     """Real SDK instance for end-to-end tests."""
     async with AgentMessaging[Dict[str, Any]](test_config) as sdk:
         yield sdk
+
+
+# Integration Test Fixtures for Phase 2 Query Tests
+@pytest.fixture
+def db_pool(db_manager: PostgreSQLManager):
+    """Database manager for backward compatibility with Phase 2 tests.
+
+    Note: Despite the name 'db_pool', this returns the full db_manager
+    because repositories expect PostgreSQLManager, not just the pool.
+    """
+    return db_manager
+
+
+@pytest_asyncio.fixture
+async def org_a(db_manager: PostgreSQLManager) -> Organization:
+    """Test organization A for integration tests."""
+    org_repo = OrganizationRepository(db_manager)
+    org_id = await org_repo.create(external_id=f"org_a_{uuid4().hex[:8]}", name="Organization A")
+    return await org_repo.get_by_id(org_id)
+
+
+@pytest_asyncio.fixture
+async def agent_alice(db_manager: PostgreSQLManager, org_a: Organization) -> Agent:
+    """Test agent Alice for integration tests."""
+    agent_repo = AgentRepository(db_manager)
+    agent_id = await agent_repo.create(
+        external_id=f"alice_{uuid4().hex[:8]}", organization_id=org_a.id, name="Alice"
+    )
+    return await agent_repo.get_by_id(agent_id)
+
+
+@pytest_asyncio.fixture
+async def agent_bob(db_manager: PostgreSQLManager, org_a: Organization) -> Agent:
+    """Test agent Bob for integration tests."""
+    agent_repo = AgentRepository(db_manager)
+    agent_id = await agent_repo.create(
+        external_id=f"bob_{uuid4().hex[:8]}", organization_id=org_a.id, name="Bob"
+    )
+    return await agent_repo.get_by_id(agent_id)
+
+
+@pytest_asyncio.fixture
+async def agent_charlie(db_manager: PostgreSQLManager, org_a: Organization) -> Agent:
+    """Test agent Charlie for integration tests."""
+    agent_repo = AgentRepository(db_manager)
+    agent_id = await agent_repo.create(
+        external_id=f"charlie_{uuid4().hex[:8]}", organization_id=org_a.id, name="Charlie"
+    )
+    return await agent_repo.get_by_id(agent_id)
+
+
+# Integration Test Fixtures for Phase 4 (Metadata & Advanced Features)
+@pytest_asyncio.fixture
+async def message_repo_integration(db_manager: PostgreSQLManager) -> MessageRepository:
+    """Real message repository for Phase 4 integration tests."""
+    return MessageRepository(db_manager)
+
+
+@pytest_asyncio.fixture
+async def session_repo_integration(db_manager: PostgreSQLManager) -> SessionRepository:
+    """Real session repository for Phase 4 integration tests."""
+    return SessionRepository(db_manager)
+
+
+@pytest_asyncio.fixture
+async def meeting_repo_integration(db_manager: PostgreSQLManager) -> MeetingRepository:
+    """Real meeting repository for Phase 4 integration tests."""
+    return MeetingRepository(db_manager)
 
 
 # Test Helper Functions

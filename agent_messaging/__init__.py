@@ -20,6 +20,13 @@ from .exceptions import (
 )
 from .messaging import OneWayMessenger, Conversation, MeetingManager
 from .utils import MeetingTimeoutManager
+from .handlers import (
+    HandlerContext,
+    OneWayHandler,
+    ConversationHandler,
+    MeetingHandler,
+    SystemHandler,
+)
 
 __all__ = [
     "AgentMessaging",
@@ -36,4 +43,10 @@ __all__ = [
     "MeetingNotFoundError",
     "MeetingError",
     "TimeoutError",
+    # Phase 3 handler types
+    "HandlerContext",
+    "OneWayHandler",
+    "ConversationHandler",
+    "MeetingHandler",
+    "SystemHandler",
 ]
