@@ -246,6 +246,20 @@ def event_handler() -> MeetingEventHandler:
 
 
 @pytest.fixture
+def one_way_messenger(
+    mock_handler_registry: MagicMock, mock_message_repo: MagicMock, mock_agent_repo: MagicMock
+):
+    """OneWayMessenger instance with mocked dependencies."""
+    from agent_messaging.messaging.one_way import OneWayMessenger
+
+    return OneWayMessenger(
+        handler_registry=mock_handler_registry,
+        message_repo=mock_message_repo,
+        agent_repo=mock_agent_repo,
+    )
+
+
+@pytest.fixture
 def mock_handler_registry() -> MagicMock:
     """Mock handler registry."""
     registry = MagicMock(spec=HandlerRegistry)

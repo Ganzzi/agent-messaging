@@ -347,13 +347,13 @@ class TestAgentMessagingSDK:
         ):
 
             async with AgentMessaging[dict](mock_config) as sdk:
-                # Test handler registration
-                @sdk.register_handler()
+                # Test handler registration with new API
+                @sdk.register_one_way_handler("test_agent")
                 async def test_handler(message, context):
                     return {"response": "ok"}
 
                 # Verify handler registry was called
-                mock_registry.register.assert_called_once_with(test_handler)
+                mock_registry.register_one_way_handler.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_register_event_handler(

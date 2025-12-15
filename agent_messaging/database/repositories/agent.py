@@ -83,3 +83,23 @@ class AgentRepository(BaseRepository):
         """
         results = await self._fetch_all(query, [organization_id])
         return [Agent(**result) for result in results]
+
+    async def delete(self, external_id: str) -> bool:
+        """Delete agent by external ID.
+
+        Note: This will cascade delete all related sessions, messages, and meeting
+        participations due to foreign key constraints in the database schema.
+
+        Args:
+            external_id: External identifier
+
+        Returns:
+            True if agent was deleted, False if not found
+        """
+        query = """
+            DELETE FROM agents
+            WHERE external_id = $1
+            RETURNING id
+        """
+        result = await self._fetch_one(query, [external_id])
+        return result is not None

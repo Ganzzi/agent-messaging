@@ -199,6 +199,41 @@ class AgentMessaging(Generic[T]):
             raise OrganizationNotFoundError(f"Organization not found: {external_id}")
         return org
 
+    async def deregister_organization(self, external_id: str) -> bool:
+        """Deregister (delete) an organization.
+
+        WARNING: This will cascade delete all related agents, sessions, messages,
+        and meetings associated with this organization due to foreign key constraints.
+        Use with caution in production environments.
+
+        Args:
+            external_id: External identifier
+
+        Returns:
+            True if organization was deleted, False if not found
+
+        Raises:
+            ValueError: If external_id is invalid
+        """
+        if not self._org_repo:
+            raise RuntimeError("SDK not initialized. Use 'async with' context manager.")
+
+        # Input validation
+        if not external_id or not isinstance(external_id, str):
+            raise ValueError("external_id must be a non-empty string")
+        if len(external_id.strip()) == 0:
+            raise ValueError("external_id cannot be empty or whitespace")
+
+        external_id = external_id.strip()
+
+        logger.info(f"Deregistering organization: {external_id}")
+        deleted = await self._org_repo.delete(external_id)
+        if deleted:
+            logger.info(f"Organization deregistered: {external_id}")
+        else:
+            logger.warning(f"Organization not found for deregistration: {external_id}")
+        return deleted
+
     # ========================================================================
     # Agent Management
     # ========================================================================
@@ -283,36 +318,44 @@ class AgentMessaging(Generic[T]):
             raise AgentNotFoundError(f"Agent not found: {external_id}")
         return agent
 
+    async def deregister_agent(self, external_id: str) -> bool:
+        """Deregister (delete) an agent.
+
+        WARNING: This will cascade delete all related sessions, messages, and meeting
+        participations associated with this agent due to foreign key constraints.
+        Use with caution in production environments.
+
+        Args:
+            external_id: External identifier
+
+        Returns:
+            True if agent was deleted, False if not found
+
+        Raises:
+            ValueError: If external_id is invalid
+        """
+        if not self._agent_repo:
+            raise RuntimeError("SDK not initialized. Use 'async with' context manager.")
+
+        # Input validation
+        if not external_id or not isinstance(external_id, str):
+            raise ValueError("external_id must be a non-empty string")
+        if len(external_id.strip()) == 0:
+            raise ValueError("external_id cannot be empty or whitespace")
+
+        external_id = external_id.strip()
+
+        logger.info(f"Deregistering agent: {external_id}")
+        deleted = await self._agent_repo.delete(external_id)
+        if deleted:
+            logger.info(f"Agent deregistered: {external_id}")
+        else:
+            logger.warning(f"Agent not found for deregistration: {external_id}")
+        return deleted
+
     # ========================================================================
     # Handler Registration
     # ========================================================================
-
-    def register_handler(self):
-        """Register a message handler for all agents.
-
-        .. deprecated:: 2.0.0
-            Use register_one_way_handler(), register_conversation_handler(),
-            or register_meeting_handler() instead.
-
-        This decorator registers an async function to handle messages for all agents.
-        Only one global handler can be registered.
-
-        Returns:
-            Decorator function
-
-        Example:
-            @sdk.register_handler()
-            async def handle_message(message: T, context: MessageContext) -> Optional[T]:
-                print(f"Agent {context.recipient_id} received: {message}")
-                return {"response": "OK"}
-        """
-        logger.warning(
-            "register_handler() is deprecated in Phase 2+. "
-            "Use register_one_way_handler(), register_conversation_handler(), "
-            "or register_meeting_handler() instead."
-        )
-        logger.info("Registering global message handler")
-        return self._handler_registry.register
 
     def register_one_way_handler(self, agent_external_id: str):
         """Register a one-way message handler for an agent (Phase 3+).

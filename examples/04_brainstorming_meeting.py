@@ -135,64 +135,61 @@ async def main():
         await sdk.register_agent("bob", "brainstorm_co", "Bob")
         await sdk.register_agent("charlie", "brainstorm_co", "Charlie")
 
-        # Register global handler for all agents
-        @sdk.register_handler()
-        async def global_handler(message, context):
+        # Register meeting handlers for participants
+        async def participant_handler(message, context):
             recipient = context.recipient_external_id
+            logger.info(f"{recipient.capitalize()}: Received meeting message: {message}")
 
-            if recipient in ["alice", "bob", "charlie"]:
-                # Handle meeting messages for participants
-                if context.meeting_id:
-                    logger.info(f"{recipient.capitalize()}: Received meeting message: {message}")
+            # Attend the meeting if not already attending
+            try:
+                await sdk.meeting.attend_meeting(recipient, context.meeting_id)
+                logger.info(f"{recipient.capitalize()}: Joined meeting")
+            except Exception as e:
+                logger.debug(f"{recipient.capitalize()}: Already attending or error: {e}")
 
-                    # Attend the meeting if not already attending
-                    try:
-                        await sdk.meeting.attend_meeting(recipient, context.meeting_id)
-                        logger.info(f"{recipient.capitalize()}: Joined meeting")
-                    except Exception as e:
-                        logger.debug(f"{recipient.capitalize()}: Already attending or error: {e}")
+            # If it's this agent's turn, share an idea
+            status = await sdk.meeting.get_meeting_status(context.meeting_id)
+            if status.get("current_speaker_external_id") == recipient:
+                logger.info(f"{recipient.capitalize()}: It's my turn! Sharing idea...")
 
-                    # If it's this agent's turn, share an idea
-                    status = await sdk.meeting.get_meeting_status(context.meeting_id)
-                    if status.get("current_speaker_external_id") == recipient:
-                        logger.info(f"{recipient.capitalize()}: It's my turn! Sharing idea...")
+                # Different ideas for each agent
+                if recipient == "alice":
+                    idea = IdeaMessage(
+                        speaker="alice",
+                        idea="We should add a dark mode toggle to improve user experience.",
+                        category="feature",
+                    )
+                    next_speaker = "bob"
+                elif recipient == "bob":
+                    idea = IdeaMessage(
+                        speaker="bob",
+                        idea="The API response times are too slow. We need to optimize database queries.",
+                        category="improvement",
+                    )
+                    next_speaker = "charlie"
+                elif recipient == "charlie":
+                    idea = IdeaMessage(
+                        speaker="charlie",
+                        idea="We should add comprehensive error logging to help with debugging.",
+                        category="bug_fix",
+                    )
+                    next_speaker = "alice"  # Back to Alice for another round
 
-                        # Different ideas for each agent
-                        if recipient == "alice":
-                            idea = IdeaMessage(
-                                speaker="alice",
-                                idea="We should add a dark mode toggle to improve user experience.",
-                                category="feature",
-                            )
-                            next_speaker = "bob"
-                        elif recipient == "bob":
-                            idea = IdeaMessage(
-                                speaker="bob",
-                                idea="The API response times are too slow. We need to optimize database queries.",
-                                category="improvement",
-                            )
-                            next_speaker = "charlie"
-                        elif recipient == "charlie":
-                            idea = IdeaMessage(
-                                speaker="charlie",
-                                idea="We should add comprehensive error logging to help with debugging.",
-                                category="bug_fix",
-                            )
-                            next_speaker = "alice"  # Back to Alice for another round
+                await sdk.meeting.speak(
+                    speaker_external_id=recipient,
+                    meeting_id=context.meeting_id,
+                    message=idea,
+                    next_speaker=next_speaker,
+                )
 
-                        await sdk.meeting.speak(
-                            speaker_external_id=recipient,
-                            meeting_id=context.meeting_id,
-                            message=idea,
-                            next_speaker=next_speaker,
-                        )
+                logger.info(
+                    f"{recipient.capitalize()}: Idea shared, passing turn to {next_speaker}"
+                )
 
-                        logger.info(
-                            f"{recipient.capitalize()}: Idea shared, passing turn to {next_speaker}"
-                        )
-            elif recipient == "moderator":
-                # Moderator doesn't need message handling in this example
-                pass
+        # Register handlers for each participant
+        sdk.register_meeting_handler("alice")(participant_handler)
+        sdk.register_meeting_handler("bob")(participant_handler)
+        sdk.register_meeting_handler("charlie")(participant_handler)
 
         # Start all agents concurrently
         await asyncio.gather(

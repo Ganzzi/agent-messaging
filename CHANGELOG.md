@@ -5,6 +5,88 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-12-15
+
+### Added
+- **One-Way Message Query Methods** - Complete message retrieval and filtering
+  - `get_sent_messages()` - Get messages sent by an agent with date filtering
+  - `get_received_messages()` - Get messages received by an agent with read status filtering
+  - `mark_messages_read()` - Mark messages as read for recipient
+  - `get_message_count()` - Get count of messages by role and read status
+- **Message Metadata Support** - Optional metadata parameter in all send methods
+  - `OneWayMessenger.send(metadata=...)` - Attach custom metadata to one-way messages
+  - `Conversation.send_and_wait(metadata=...)` - Attach metadata to sync conversations
+  - `Conversation.send_no_wait(metadata=...)` - Attach metadata to async conversations
+  - `MeetingManager.speak(metadata=...)` - Attach metadata to meeting messages
+- **Organization and Agent De-registration** - Cleanup methods with cascading deletes
+  - `deregister_organization(external_id)` - Delete organization and all related data
+  - `deregister_agent(external_id)` - Delete agent and all related data
+- **Handler Architecture Refactor** - Type-safe handler system
+  - 5 handler types: OneWay, Conversation, Meeting, System, Event
+  - `register_one_way_handler(agent_external_id)` - Register one-way message handlers
+  - `register_conversation_handler(agent_external_id)` - Register conversation handlers
+  - `register_meeting_handler(agent_external_id)` - Register meeting handlers
+  - `register_system_handler()` - Register system event handlers
+  - Type-based routing with agent-specific and context-specific handlers
+  - Backward compatible with deprecated global `register_handler()`
+- **Comprehensive API Documentation** - Updated api-reference.md with all new features
+  - Query methods documentation with examples
+  - Metadata parameter documentation
+  - De-registration methods documentation
+  - Detailed handler registration guide with use cases and examples
+  - Response structure documentation for all query methods
+
+### Changed
+- **API Improvements:**
+  - Removed deprecated `register_handler()` method from client (global handler still supported via registry)
+  - Updated all examples to use type-specific handler registration methods
+  - Enhanced error messages with more context
+  - Updated test suite to use new API
+- **Documentation Updates:**
+  - Complete rewrite of Handler Registration section in API reference
+  - Added comprehensive HANDLER_GUIDE.md (400+ lines)
+  - Updated quick-start example with new API
+  - Added V2_CLEANUP_SUMMARY.md with migration guide
+
+### Fixed
+- Handler registration now properly routes based on agent ID and context type
+- De-registration now properly cascades deletes to avoid orphaned data
+- Message queries properly filter for one-way messages (excluding session/meeting messages)
+
+### Performance
+- New indexes on query methods improve performance:
+  - `idx_messages_sender_created` - Fast sender message queries
+  - `idx_messages_recipient_read_created` - Fast recipient message queries
+- Connection pooling improvements maintained from v0.1.0
+
+### Testing
+- 10 new unit tests for OneWayMessenger query methods (all passing)
+- 28 handler routing and type system tests (all passing)
+- 162+ total unit tests passing (100% success rate)
+- Comprehensive test fixtures for all new features
+
+### Documentation
+- Updated docs/api-reference.md with 200+ new lines
+- Added comprehensive examples for all new features
+- Migration guide for existing users
+- Handler type system explanation with use cases
+
+### Breaking Changes
+- **None** - v2.0.0 is fully backward compatible with v0.1.0
+- Old `register_handler()` global handler still works with deprecation warnings
+- All new features are additive
+
+### Migration Notes
+- **From v0.1.0 to v2.0.0:**
+  1. No changes required - all old code continues to work
+  2. Optional: Update handler registration to use new type-specific methods
+  3. New: Use query methods for retrieving message history
+  4. New: Attach metadata to messages for tracking and filtering
+  5. New: Use de-registration methods for cleanup instead of manual deletion
+  - See [docs/V2_CLEANUP_SUMMARY.md](docs/V2_CLEANUP_SUMMARY.md) for detailed migration guide
+
+---
+
 ## [0.1.0] - 2025-10-20
 
 ### Added

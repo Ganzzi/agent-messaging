@@ -64,3 +64,23 @@ class OrganizationRepository(BaseRepository):
         """
         result = await self._fetch_one(query, [organization_id])
         return Organization(**result) if result else None
+
+    async def delete(self, external_id: str) -> bool:
+        """Delete organization by external ID.
+
+        Note: This will cascade delete all related agents, sessions, messages, and meetings
+        due to foreign key constraints in the database schema.
+
+        Args:
+            external_id: External identifier
+
+        Returns:
+            True if organization was deleted, False if not found
+        """
+        query = """
+            DELETE FROM organizations
+            WHERE external_id = $1
+            RETURNING id
+        """
+        result = await self._fetch_one(query, [external_id])
+        return result is not None

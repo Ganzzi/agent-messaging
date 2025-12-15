@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "agent-messaging"
-version = "0.1.0"
+version = "2.0.0"
 description = "Python SDK for AI agent communication with messaging protocol"
 authors = ["Ganzzi <boinguyen9701@gmail.com>"]
 maintainers = ["Ganzzi <boinguyen9701@gmail.com>"]
@@ -21,7 +21,7 @@ keywords = [
     "meetings",
     "one-way",
     "synchronous",
-    "asynchronous"
+    "asynchronous",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -38,12 +38,8 @@ classifiers = [
     "Framework :: AsyncIO",
     "Typing :: Typed",
 ]
-packages = [{include = "agent_messaging"}]
-include = [
-    "CHANGELOG.md",
-    "LICENSE",
-    "README.md",
-]
+packages = [{ include = "agent_messaging" }]
+include = ["CHANGELOG.md", "LICENSE", "README.md"]
 exclude = [
     "tests/",
     "docs/",

@@ -5,8 +5,8 @@
 [![PyPI version](https://img.shields.io/pypi/v/agent-messaging.svg)](https://pypi.org/project/agent-messaging/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: v2.0.0 Ready](https://img.shields.io/badge/Status-v2.0.0%20Ready-brightgreen.svg)]()
-[![Tests: 208/208 (100%)](https://img.shields.io/badge/Tests-208%2F208%20(100%25)-brightgreen.svg)]()
+[![Status: v2.0.0 Ready](https://img.shields.io/badge/Status-v2.0.0%20Released-brightgreen.svg)]()
+[![Tests: 162/162 (100%)](https://img.shields.io/badge/Tests-162%2F162%20(100%25)-brightgreen.svg)]()
 
 **Agent Messaging Protocol** is a Python SDK that enables AI agents to communicate with each other using human-like messaging patterns. It supports synchronous and asynchronous conversations, one-way notifications, and multi-agent meetings with turn-based coordination.
 
@@ -102,12 +102,12 @@ async def main():
         await sdk.register_agent("alice", "my_org", "Alice")
         await sdk.register_agent("bob", "my_org", "Bob")
         
-        # Register shared handler (Phase 10: handlers are shared, not per-agent)
-        @sdk.register_handler()
+        # Register handler for bob
+        @sdk.register_one_way_handler("bob")
         async def message_handler(message: ChatMessage, context):
-            print(f"{context.recipient_external_id} received: {message.text}")
+            print(f"Bob received: {message.text}")
         
-        # Send message (Phase 10: one-to-many pattern)
+        # Send message (one-to-many pattern)
         await sdk.one_way.send(
             sender_external_id="alice",
             recipient_external_ids=["bob"],
@@ -272,7 +272,7 @@ final = await sdk.conversation.send_and_wait(
 
 ## 🛠️ Development Status
 
-**Current Phase:** Phase 10 Complete - Major Refactoring Complete
+**Current Phase:** ✅ v2.0.0 Released - Production Ready
 
 ### Implementation Timeline
 
@@ -285,10 +285,17 @@ Week 7:    Core API, Error Handling, Testing          [Complete]
 Week 8:    Testing & Quality Assurance                [Complete]
 Week 9:    Documentation & Examples                   [Complete]
 Week 10:   Major Refactoring (Architecture)           [Complete]
-Week 11:   Packaging & Release                        [Ready]
+Week 11:   v2.0.0 Release (Dec 15, 2025)              [Complete]
 ```
 
-**Estimated Completion:** 6-8 weeks from start (Phase 11 remaining)
+**v2.0.0 Release Features:**
+- Query methods for all message types
+- Metadata support on all send operations
+- Organization and agent de-registration
+- Type-safe handler architecture with routing
+- Comprehensive API documentation
+- 162+ unit tests (100% pass rate)
+- Fully backward compatible with v0.1.0
 
 [See complete implementation plan →](docs/plan/00-implementation-plan.md)
 
