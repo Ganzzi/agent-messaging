@@ -1,8 +1,8 @@
 # Agent Messaging Protocol - API Reference
 
-> Complete API documentation for the Agent Messaging Protocol SDK v0.3.0
+> Complete API documentation for the Agent Messaging Protocol SDK v0.3.1
 
-**Version:** 0.3.0  
+**Version:** 0.3.1  
 **Status:** Production Ready  
 **Last Updated:** December 16, 2025
 
@@ -1499,7 +1499,17 @@ async def on_timeout(event):
 
 ## Changelog
 
-### v0.3.0 (Current - December 2025)
+### v0.3.1 (Current - December 16, 2025)
+
+**New Features:**
+- ✨ **Automatic Schema Initialization** - Database schema is now automatically initialized on SDK startup
+  - Enabled by default for improved developer experience
+  - Fully idempotent - safe to call multiple times
+  - Can be disabled via `Config(auto_initialize_schema=False)` or `AUTO_INITIALIZE_SCHEMA=false`
+  - Works with all deployment scenarios (Docker, Kubernetes, local development)
+- ✅ Backward compatible - `scripts/init_db.py` still works for manual initialization
+
+### v0.3.0 (December 2025)
 
 **Features:**
 - ✅ Four communication patterns (one-way, sync conversation, async conversation, meetings)

@@ -44,6 +44,7 @@ def mock_db_manager():
     """Mock database manager."""
     manager = MagicMock()
     manager.initialize = AsyncMock()
+    manager.initialize_schema = AsyncMock()
     manager.close = AsyncMock()
     manager.pool = MagicMock()
     return manager
@@ -146,6 +147,7 @@ class TestAgentMessagingSDK:
             result = await sdk.__aenter__()
             assert result is sdk
             mock_db_manager.initialize.assert_called_once()
+            mock_db_manager.initialize_schema.assert_called_once()
 
             # Test repositories are initialized
             assert sdk._org_repo is mock_repos["org_repo"]

@@ -120,13 +120,17 @@ class AgentMessaging(Generic[T_OneWay, T_Conversation, T_Meeting]):
     async def __aenter__(self) -> "AgentMessaging[T_OneWay, T_Conversation, T_Meeting]":
         """Async context manager entry.
 
-        Initializes database connection pool and repositories.
+        Initializes database connection pool, schema (if enabled), and repositories.
 
         Returns:
             Self instance
         """
         logger.info("Entering AgentMessaging context")
         await self._db_manager.initialize()
+
+        # Initialize database schema if enabled (idempotent, safe to call multiple times)
+        if self.config.auto_initialize_schema:
+            await self._db_manager.initialize_schema()
 
         # Initialize repositories
         self._org_repo = OrganizationRepository(self._db_manager)

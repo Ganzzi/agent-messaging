@@ -158,6 +158,10 @@ class Config(BaseModel):
     messaging: MessagingConfig = Field(default_factory=MessagingConfig)
     debug: bool = Field(default_factory=lambda: os.getenv("DEBUG", "false").lower() == "true")
     log_level: str = Field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
+    auto_initialize_schema: bool = Field(
+        default_factory=lambda: os.getenv("AUTO_INITIALIZE_SCHEMA", "true").lower() == "true",
+        description="Automatically initialize database schema on SDK initialization (idempotent)",
+    )
 
     def __init__(self, **data):
         """Initialize Config, allowing field overrides while respecting environment variables."""

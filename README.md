@@ -5,8 +5,8 @@
 [![PyPI version](https://img.shields.io/pypi/v/agent-messaging.svg)](https://pypi.org/project/agent-messaging/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: v0.3.0 Ready](https://img.shields.io/badge/Status-v0.3.0%20Released-brightgreen.svg)]()
-[![Tests: 63/63 (100%)](https://img.shields.io/badge/Tests-63%2F63%20(100%25)-brightgreen.svg)]()
+[![Status: v0.3.1 Ready](https://img.shields.io/badge/Status-v0.3.1%20Released-brightgreen.svg)]()
+[![Tests: 179/179 (100%)](https://img.shields.io/badge/Tests-179%2F179%20(100%25)-brightgreen.svg)]()
 
 **Agent Messaging Protocol** is a Python SDK that enables AI agents to communicate with each other using human-like messaging patterns. It supports synchronous and asynchronous conversations, one-way notifications, and multi-agent meetings with turn-based coordination.
 
@@ -57,11 +57,12 @@ config = Config(
         default_meeting_turn_duration=120.0,
         handler_timeout=60.0
     ),
+    auto_initialize_schema=True,  # Automatic schema init (enabled by default)
     debug=True
 )
 
 async with AgentMessaging[dict](config=config) as sdk:
-    # Use SDK with custom config
+    # Database schema is automatically initialized here!
     pass
 ```
 
