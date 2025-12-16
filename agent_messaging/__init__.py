@@ -1,7 +1,7 @@
 # Agent Messaging Protocol
 # A Python SDK for AI agent communication
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 __author__ = "Ganzzi"
 __email__ = "boinguyen9701@gmail.com"
 __license__ = "MIT"
@@ -21,20 +21,39 @@ from .exceptions import (
 from .messaging import OneWayMessenger, Conversation, MeetingManager
 from .utils import MeetingTimeoutManager
 from .handlers import (
+    # Generic type variables
+    T_OneWay,
+    T_Conversation,
+    T_Meeting,
+    # Context types
     HandlerContext,
+    MessageContext,
+    # Handler protocols
     OneWayHandler,
     ConversationHandler,
     MeetingHandler,
     SystemHandler,
+    # Registration decorators
+    register_one_way_handler,
+    register_conversation_handler,
+    register_meeting_handler,
+    register_system_handler,
+    # Lookup and management
+    get_handler,
+    has_handler,
+    clear_handlers,
 )
 
 __all__ = [
+    # Main SDK class
     "AgentMessaging",
     "Config",
+    # Messaging classes
     "OneWayMessenger",
     "Conversation",
     "MeetingManager",
     "MeetingTimeoutManager",
+    # Exceptions
     "AgentMessagingError",
     "AgentNotFoundError",
     "OrganizationNotFoundError",
@@ -43,10 +62,24 @@ __all__ = [
     "MeetingNotFoundError",
     "MeetingError",
     "TimeoutError",
-    # Phase 3 handler types
+    # Generic type variables
+    "T_OneWay",
+    "T_Conversation",
+    "T_Meeting",
+    # Handler types
     "HandlerContext",
+    "MessageContext",
     "OneWayHandler",
     "ConversationHandler",
     "MeetingHandler",
     "SystemHandler",
+    # Handler registration
+    "register_one_way_handler",
+    "register_conversation_handler",
+    "register_meeting_handler",
+    "register_system_handler",
+    # Handler management
+    "get_handler",
+    "has_handler",
+    "clear_handlers",
 ]

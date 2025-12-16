@@ -16,13 +16,12 @@ from agent_messaging.database.repositories.organization import OrganizationRepos
 from agent_messaging.database.repositories.message import MessageRepository
 from agent_messaging.database.repositories.session import SessionRepository
 from agent_messaging.database.repositories.meeting import MeetingRepository
-from agent_messaging.handlers.registry import HandlerRegistry
+from agent_messaging.handlers import clear_handlers, MessageContext
 from agent_messaging.handlers.events import MeetingEventHandler
 from agent_messaging.models import (
     Organization,
     Agent,
     Message,
-    MessageContext,
     Session,
     SessionStatus,
     Meeting,
@@ -233,10 +232,12 @@ def mock_meeting_repo() -> MagicMock:
 
 
 # Handler and Event Fixtures
-@pytest.fixture
-def handler_registry() -> HandlerRegistry:
-    """Handler registry instance."""
-    return HandlerRegistry()
+@pytest.fixture(autouse=True)
+def clean_handlers():
+    """Clean global handlers before and after each test."""
+    clear_handlers()
+    yield
+    clear_handlers()
 
 
 @pytest.fixture
@@ -246,26 +247,14 @@ def event_handler() -> MeetingEventHandler:
 
 
 @pytest.fixture
-def one_way_messenger(
-    mock_handler_registry: MagicMock, mock_message_repo: MagicMock, mock_agent_repo: MagicMock
-):
+def one_way_messenger(mock_message_repo: MagicMock, mock_agent_repo: MagicMock):
     """OneWayMessenger instance with mocked dependencies."""
     from agent_messaging.messaging.one_way import OneWayMessenger
 
     return OneWayMessenger(
-        handler_registry=mock_handler_registry,
         message_repo=mock_message_repo,
         agent_repo=mock_agent_repo,
     )
-
-
-@pytest.fixture
-def mock_handler_registry() -> MagicMock:
-    """Mock handler registry."""
-    registry = MagicMock(spec=HandlerRegistry)
-    registry.has_handler = MagicMock(return_value=True)
-    registry.invoke_handler_async = AsyncMock()
-    return registry
 
 
 # SDK Fixtures
@@ -282,11 +271,12 @@ async def sdk(
         pytest.mock.patch("agent_messaging.client.MessageRepository"),
         pytest.mock.patch("agent_messaging.client.SessionRepository"),
         pytest.mock.patch("agent_messaging.client.MeetingRepository"),
-        pytest.mock.patch("agent_messaging.client.HandlerRegistry"),
         pytest.mock.patch("agent_messaging.client.MeetingEventHandler"),
     ):
 
-        async with AgentMessaging[Dict[str, Any]](test_config) as sdk_instance:
+        async with AgentMessaging[Dict[str, Any], Dict[str, Any], Dict[str, Any]](
+            test_config
+        ) as sdk_instance:
             yield sdk_instance
 
 
@@ -421,7 +411,7 @@ async def e2e_sdk(
     test_config: Config, db_manager: PostgreSQLManager
 ) -> AsyncGenerator[AgentMessaging, None]:
     """Real SDK instance for end-to-end tests."""
-    async with AgentMessaging[Dict[str, Any]](test_config) as sdk:
+    async with AgentMessaging[Dict[str, Any], Dict[str, Any], Dict[str, Any]](test_config) as sdk:
         yield sdk
 
 

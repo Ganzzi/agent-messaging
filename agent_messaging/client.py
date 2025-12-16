@@ -1,7 +1,13 @@
-"""Main Agent Messaging SDK client."""
+"""Main Agent Messaging SDK client.
+
+Provides the AgentMessaging class with 3 generic type parameters:
+- T_OneWay: Type for fire-and-forget messages
+- T_Conversation: Type for request-response messages
+- T_Meeting: Type for meeting messages
+"""
 
 import logging
-from typing import Generic, List, Optional, TypeVar
+from typing import Generic, List, Optional
 
 from .config import Config
 from .database.manager import PostgreSQLManager
@@ -14,23 +20,31 @@ from .exceptions import (
     AgentNotFoundError,
     OrganizationNotFoundError,
 )
-from .handlers.registry import HandlerRegistry
+from .handlers.types import T_OneWay, T_Conversation, T_Meeting
 from .handlers.events import MeetingEventHandler, MeetingEventType
+from .handlers import shutdown as shutdown_handlers
 from .messaging.one_way import OneWayMessenger
 from .messaging.conversation import Conversation
 from .messaging.meeting import MeetingManager
-from .models import CreateAgentRequest, CreateOrganizationRequest
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
 
-
-class AgentMessaging(Generic[T]):
+class AgentMessaging(Generic[T_OneWay, T_Conversation, T_Meeting]):
     """Main SDK class for Agent Messaging Protocol.
 
     This is the primary entry point for using the Agent Messaging Protocol SDK.
     It provides methods for managing organizations, agents, and messaging.
+
+    This class uses 3 generic type parameters:
+    - T_OneWay: Type for fire-and-forget messages
+    - T_Conversation: Type for request-response messages
+    - T_Meeting: Type for meeting messages
+
+    Handlers are registered globally using decorators from agent_messaging.handlers:
+    - @register_one_way_handler
+    - @register_conversation_handler
+    - @register_meeting_handler
 
     Supports three configuration patterns:
 
@@ -42,7 +56,7 @@ class AgentMessaging(Generic[T]):
         database=DatabaseConfig(host="prod-db", password="secret"),
         debug=False
     )
-    async with AgentMessaging[dict](config=config) as sdk:
+    async with AgentMessaging[Notification, Query, MeetingMsg](config=config) as sdk:
         # Use with custom config
         pass
     ```
@@ -54,30 +68,32 @@ class AgentMessaging(Generic[T]):
     python app.py
     ```
     ```python
-    async with AgentMessaging[dict]() as sdk:  # Uses env vars
-        pass
-    ```
-
-    **.env File (Convenient for local development):**
-    ```bash
-    pip install agent-messaging[dev]  # For .env support
-    echo "POSTGRES_HOST=localhost" > .env
-    ```
-    ```python
-    async with AgentMessaging[dict]() as sdk:  # Loads .env automatically
+    async with AgentMessaging[Notification, Query, MeetingMsg]() as sdk:
         pass
     ```
 
     Example:
-        async with AgentMessaging[dict]() as sdk:
+        from agent_messaging import AgentMessaging
+        from agent_messaging.handlers import (
+            register_one_way_handler,
+            register_conversation_handler,
+            MessageContext,
+        )
+
+        # Define handlers globally
+        @register_one_way_handler
+        async def handle_notification(message: Notification, context: MessageContext) -> None:
+            print(f"Received: {message}")
+
+        @register_conversation_handler
+        async def handle_query(message: Query, context: MessageContext) -> Query:
+            return Query(response="Hello")
+
+        # Use the SDK
+        async with AgentMessaging[Notification, Query, MeetingMsg]() as sdk:
             await sdk.register_organization("org_001", "My Organization")
             await sdk.register_agent("alice", "org_001", "Alice Agent")
-
-            @sdk.register_handler("alice")
-            async def handle_alice(message: dict, context: MessageContext):
-                return {"response": "Hello"}
-
-            await sdk.one_way.send("alice", "bob", {"text": "Hi"})
+            await sdk.one_way.send("alice", "bob", Notification(text="Hi"))
     """
 
     def __init__(self, config: Optional[Config] = None):
@@ -90,7 +106,6 @@ class AgentMessaging(Generic[T]):
         """
         self.config = config or Config()
         self._db_manager = PostgreSQLManager(self.config.database)
-        self._handler_registry = HandlerRegistry(self.config.messaging.handler_timeout)
         self._event_handler = MeetingEventHandler()
 
         # Repositories (initialized in __aenter__)
@@ -102,7 +117,7 @@ class AgentMessaging(Generic[T]):
 
         logger.info("AgentMessaging SDK initialized")
 
-    async def __aenter__(self) -> "AgentMessaging[T]":
+    async def __aenter__(self) -> "AgentMessaging[T_OneWay, T_Conversation, T_Meeting]":
         """Async context manager entry.
 
         Initializes database connection pool and repositories.
@@ -128,7 +143,7 @@ class AgentMessaging(Generic[T]):
         Closes database connection pool and cleans up resources.
         """
         logger.info("Exiting AgentMessaging context")
-        await self._handler_registry.shutdown()
+        await shutdown_handlers()
         await self._db_manager.close()
 
     # ========================================================================
@@ -354,114 +369,8 @@ class AgentMessaging(Generic[T]):
         return deleted
 
     # ========================================================================
-    # Handler Registration
+    # Event Handler Registration
     # ========================================================================
-
-    def register_one_way_handler(self, agent_external_id: str):
-        """Register a one-way message handler for an agent (Phase 3+).
-
-        One-way handlers process fire-and-forget messages. The handler is invoked
-        asynchronously and the sender does not wait for or expect a response.
-
-        Args:
-            agent_external_id: The agent's external ID
-
-        Returns:
-            Decorator function
-
-        Example:
-            @sdk.register_one_way_handler("agent_alice")
-            async def handle_notification(message: dict, context: MessageContext) -> None:
-                print(f"Notification received: {message}")
-        """
-
-        def decorator(handler):
-            self._handler_registry.register_one_way_handler(agent_external_id, handler)
-            logger.info(f"Registered one-way handler for agent '{agent_external_id}'")
-            return handler
-
-        return decorator
-
-    def register_conversation_handler(self, agent_external_id: str):
-        """Register a synchronous conversation handler for an agent (Phase 3+).
-
-        Conversation handlers process request-response messages. The sender blocks
-        and waits for the handler's response with a configurable timeout.
-
-        Args:
-            agent_external_id: The agent's external ID
-
-        Returns:
-            Decorator function
-
-        Example:
-            @sdk.register_conversation_handler("agent_support")
-            async def handle_query(message: dict, context: MessageContext) -> dict:
-                return {"answer": "Here is the answer..."}
-        """
-
-        def decorator(handler):
-            self._handler_registry.register_conversation_handler(agent_external_id, handler)
-            logger.info(f"Registered conversation handler for agent '{agent_external_id}'")
-            return handler
-
-        return decorator
-
-    def register_meeting_handler(self, agent_external_id: str):
-        """Register a meeting message handler for an agent (Phase 3+).
-
-        Meeting handlers process messages during active meetings. The handler is invoked
-        when the agent has the speaking turn.
-
-        Args:
-            agent_external_id: The agent's external ID
-
-        Returns:
-            Decorator function
-
-        Example:
-            @sdk.register_meeting_handler("agent_alice")
-            async def handle_meeting_turn(message: dict, context: MessageContext) -> dict:
-                return {"contribution": "My thoughts on..."}
-        """
-
-        def decorator(handler):
-            self._handler_registry.register_meeting_handler(agent_external_id, handler)
-            logger.info(f"Registered meeting handler for agent '{agent_external_id}'")
-            return handler
-
-        return decorator
-
-    def register_system_handler(self):
-        """Register a global system message handler (Phase 3+).
-
-        System handlers process internal messages like timeouts, events, etc.
-        This is a global handler (not agent-specific).
-
-        Returns:
-            Decorator function
-
-        Example:
-            @sdk.register_system_handler()
-            async def handle_system(message: dict, context: MessageContext) -> None:
-                if message.get("type") == "timeout":
-                    logger.warning(f"Agent {context.sender_id} timed out")
-        """
-
-        def decorator(handler):
-            self._handler_registry.register_system_handler(handler)
-            logger.info("Registered global system handler")
-            return handler
-
-        return decorator
-
-    def has_handler(self) -> bool:
-        """Check if a handler is registered.
-
-        Returns:
-            True if handler is registered
-        """
-        return self._handler_registry.has_handler()
 
     def register_event_handler(self, event_type: MeetingEventType):
         """Register an event handler for meeting events.
@@ -512,7 +421,7 @@ class AgentMessaging(Generic[T]):
         meeting_id: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[T]:
+    ) -> List:
         """Search messages using full-text search.
 
         Uses PostgreSQL's full-text search capabilities to find messages
@@ -535,7 +444,7 @@ class AgentMessaging(Generic[T]):
             offset: Number of results to skip (default: 0)
 
         Returns:
-            List of matching messages ordered by relevance
+            List of matching message contents ordered by relevance
 
         Raises:
             RuntimeError: If SDK not initialized
@@ -629,40 +538,33 @@ class AgentMessaging(Generic[T]):
             raise RuntimeError("SDK not initialized")
         return self._meeting_repo
 
-    @property
-    def handler_registry(self) -> HandlerRegistry:
-        """Get handler registry."""
-        return self._handler_registry
-
     # ========================================================================
     # Messaging Properties
     # ========================================================================
 
     @property
-    def one_way(self) -> OneWayMessenger[T]:
+    def one_way(self) -> "OneWayMessenger[T_OneWay]":
         """Get one-way messenger for fire-and-forget messaging."""
-        return OneWayMessenger[T](
-            handler_registry=self._handler_registry,
+        return OneWayMessenger[T_OneWay](
             message_repo=self._message_repo,
             agent_repo=self._agent_repo,
         )
 
     @property
-    def conversation(self) -> "Conversation[T]":
+    def conversation(self) -> "Conversation[T_Conversation]":
         """Get unified conversation messenger for both sync and async messaging."""
-        return Conversation[T](
-            handler_registry=self._handler_registry,
+        return Conversation[T_Conversation](
             message_repo=self._message_repo,
             session_repo=self._session_repo,
             agent_repo=self._agent_repo,
         )
 
     @property
-    def meeting(self) -> "MeetingManager[T]":
+    def meeting(self) -> "MeetingManager[T_Meeting]":
         """Get meeting manager for multi-agent meetings."""
         from .messaging.meeting import MeetingManager
 
-        return MeetingManager[T](
+        return MeetingManager[T_Meeting](
             meeting_repo=self._meeting_repo,
             message_repo=self._message_repo,
             agent_repo=self._agent_repo,

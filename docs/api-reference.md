@@ -1,401 +1,341 @@
 # Agent Messaging Protocol - API Reference
 
-## Table of Contents
+> Complete API documentation for the Agent Messaging Protocol SDK v0.3.0
 
-- [AgentMessaging Class](#agentmessaging-class)
-- [OneWayMessenger](#onewaymessenger)
-- [Conversation](#conversation)
-- [MeetingManager](#meetingmanager)
-- [Exceptions](#exceptions)
-- [Models](#models)
+**Version:** 0.3.0  
+**Status:** Production Ready  
+**Last Updated:** December 16, 2025
 
 ---
 
-## AgentMessaging Class
+## Table of Contents
 
-The main SDK entry point for all messaging operations.
+1. [SDK Classes](#sdk-classes)
+2. [Messaging Classes](#messaging-classes)
+3. [Handler System](#handler-system)
+4. [Models and Data Types](#models-and-data-types)
+5. [Exceptions](#exceptions)
+6. [Configuration](#configuration)
+7. [Examples](#examples)
 
-### Constructor
+---
+
+## SDK Classes
+
+### AgentMessaging[T_OneWay, T_Conversation, T_Meeting]
+
+Main SDK class providing access to all messaging capabilities and agent management.
+
+#### Generic Type Parameters
+
+- **T_OneWay**: Type for fire-and-forget message payloads
+- **T_Conversation**: Type for request-response message payloads
+- **T_Meeting**: Type for meeting message payloads
+
+#### Lifecycle Methods
 
 ```python
-AgentMessaging[T](config: Optional[Config] = None) -> AgentMessaging[T]
+def __init__(config: Optional[Config] = None) -> None:
+    """
+    Initialize the SDK with optional configuration.
+    
+    Args:
+        config: Optional Config object. If None, loads from environment variables.
+    
+    Example:
+        from agent_messaging import AgentMessaging, Config
+        
+        config = Config(database=DatabaseConfig(host="prod-db"))
+        sdk = AgentMessaging[Notification, Query, MeetingMsg](config=config)
+    """
+
+async def __aenter__() -> AgentMessaging:
+    """
+    Enter async context manager.
+    
+    Initializes database connection pool and prepares repositories.
+    
+    Returns:
+        Self for use in async with block.
+    
+    Raises:
+        DatabaseError: If connection pool initialization fails.
+    
+    Example:
+        async with AgentMessaging[dict, dict, dict]() as sdk:
+            await sdk.register_organization("org_001", "My Org")
+    """
+
+async def __aexit__(
+    exc_type: Optional[Type[BaseException]],
+    exc_val: Optional[BaseException],
+    exc_tb: Optional[TracebackType]
+) -> None:
+    """
+    Exit async context manager.
+    
+    Closes database connection pool and cleans up resources.
+    
+    Args:
+        exc_type: Exception type if exception occurred
+        exc_val: Exception value if exception occurred
+        exc_tb: Exception traceback if exception occurred
+    """
 ```
 
-**Parameters:**
-- `config` (Optional[Config]): Configuration object. If None, loads from environment variables.
-
-**Generic Type:**
-- `T`: User-defined message type (must be JSON-serializable or Pydantic model)
-
-### Context Manager Methods
-
-```python
-async def __aenter__(self) -> AgentMessaging[T]
-async def __aexit__(self, exc_type, exc_val, exc_tb) -> None
-```
-
-Initialize and cleanup database connections. Always use as async context manager.
-
-### Organization Management
+#### Organization Management
 
 ```python
 async def register_organization(
     external_id: str,
     name: str
-) -> str
+) -> UUID:
+    """
+    Register a new organization.
+    
+    Args:
+        external_id: Unique external identifier (e.g., "org_001", "company-acme")
+        name: Human-readable organization name
+    
+    Returns:
+        UUID of the created organization
+    
+    Raises:
+        ValueError: If external_id or name is empty
+        DatabaseError: If database operation fails
+    
+    Example:
+        org_id = await sdk.register_organization(
+            "org_001",
+            "Acme Corporation"
+        )
+    """
+
+async def get_organization(external_id: str) -> Organization:
+    """
+    Retrieve organization by external ID.
+    
+    Args:
+        external_id: Organization's external identifier
+    
+    Returns:
+        Organization object with id, external_id, name, timestamps
+    
+    Raises:
+        OrganizationNotFoundError: If organization doesn't exist
+        RuntimeError: If SDK not initialized
+    
+    Example:
+        org = await sdk.get_organization("org_001")
+        print(f"Organization: {org.name}")
+    """
+
+async def deregister_organization(external_id: str) -> bool:
+    """
+    Deregister/delete an organization.
+    
+    Cascades delete to all agents and their sessions.
+    
+    Args:
+        external_id: Organization's external identifier
+    
+    Returns:
+        True if organization was deleted, False if not found
+    
+    Raises:
+        RuntimeError: If SDK not initialized
+    
+    Example:
+        success = await sdk.deregister_organization("org_001")
+    """
 ```
 
-Register a new organization.
-
-**Parameters:**
-- `external_id` (str): Unique external identifier
-- `name` (str): Human-readable name
-
-**Returns:** Organization UUID
-
-**Raises:** ValueError, DatabaseError
-
-```python
-async def get_organization(external_id: str) -> Organization
-```
-
-Get organization by external ID.
-
-**Parameters:**
-- `external_id` (str): Organization external ID
-
-**Returns:** Organization model
-
-**Raises:** ValueError, OrganizationNotFoundError
-
-### Agent Management
+#### Agent Management
 
 ```python
 async def register_agent(
     external_id: str,
     organization_external_id: str,
     name: str
-) -> str
+) -> UUID:
+    """
+    Register a new agent within an organization.
+    
+    Args:
+        external_id: Unique external identifier for the agent
+        organization_external_id: External ID of the organization
+        name: Human-readable agent name
+    
+    Returns:
+        UUID of the created agent
+    
+    Raises:
+        ValueError: If parameters are empty
+        OrganizationNotFoundError: If organization doesn't exist
+        DatabaseError: If database operation fails
+    
+    Example:
+        agent_id = await sdk.register_agent(
+            "alice",
+            "org_001",
+            "Alice Agent"
+        )
+    """
+
+async def get_agent(external_id: str) -> Agent:
+    """
+    Retrieve agent by external ID.
+    
+    Args:
+        external_id: Agent's external identifier
+    
+    Returns:
+        Agent object with id, external_id, organization_id, name, timestamps
+    
+    Raises:
+        AgentNotFoundError: If agent doesn't exist
+        RuntimeError: If SDK not initialized
+    
+    Example:
+        agent = await sdk.get_agent("alice")
+        print(f"Agent: {agent.name}")
+    """
+
+async def deregister_agent(external_id: str) -> bool:
+    """
+    Deregister/delete an agent.
+    
+    Cascades delete to all their messages and sessions.
+    
+    Args:
+        external_id: Agent's external identifier
+    
+    Returns:
+        True if agent was deleted, False if not found
+    
+    Raises:
+        RuntimeError: If SDK not initialized
+    
+    Example:
+        success = await sdk.deregister_agent("alice")
+    """
 ```
 
-Register a new agent.
-
-**Parameters:**
-- `external_id` (str): Unique agent external identifier
-- `organization_external_id` (str): Parent organization external ID
-- `name` (str): Human-readable agent name
-
-**Returns:** Agent UUID
-
-**Raises:** ValueError, OrganizationNotFoundError, DatabaseError
+#### Message Search
 
 ```python
-async def get_agent(external_id: str) -> Agent
-```
-
-Get agent by external ID.
-
-**Parameters:**
-- `external_id` (str): Agent external ID
-
-**Returns:** Agent model
-
-**Raises:** ValueError, AgentNotFoundError
-
-```python
-async def deregister_organization(external_id: str) -> bool
-```
-
-Deregister (delete) an organization.
-
-**WARNING:** This will cascade delete all related agents, sessions, messages, and meetings associated with this organization due to foreign key constraints. Use with caution in production environments.
-
-**Parameters:**
-- `external_id` (str): Organization external ID
-
-**Returns:** True if organization was deleted, False if not found
-
-**Raises:** ValueError
-
-```python
-async def deregister_agent(external_id: str) -> bool
-```
-
-Deregister (delete) an agent.
-
-**WARNING:** This will cascade delete all related sessions, messages, and meeting participations associated with this agent due to foreign key constraints. Use with caution in production environments.
-
-**Parameters:**
-- `external_id` (str): Agent external ID
-
-**Returns:** True if agent was deleted, False if not found
-
-**Raises:** ValueError
-
-### Handler Registration
-
-The Agent Messaging SDK provides different handler types for different messaging patterns. Each handler type is designed for a specific communication pattern and has distinct behavior.
-
-#### Overview of Handler Types
-
-1. **One-Way Handlers** - For fire-and-forget notifications (no response expected)
-2. **Conversation Handlers** - For request-response messaging (response required)
-3. **Meeting Handlers** - For turn-based multi-agent meetings
-4. **System Handlers** - For internal system events (timeouts, errors, etc.)
-5. **Event Handlers** - For meeting lifecycle events (started, ended, turn changed, etc.)
-
-#### One-Way Handler Registration
-
-```python
-def register_one_way_handler(agent_external_id: str) -> Callable
-```
-
-Register a one-way message handler for an agent. One-way handlers process fire-and-forget messages where no response is expected. The handler is invoked asynchronously and the sender does not wait for completion.
-
-**Parameters:**
-- `agent_external_id` (str): The agent's external ID
-
-**Returns:** Decorator function
-
-**Handler Signature:**
-```python
-async def handler(message: T, context: HandlerContext) -> None:
-    # Process notification, no return value needed
-    pass
-```
-
-**Use Cases:**
-- Notifications and alerts
-- Broadcasting updates
-- Logging and monitoring
-- Event notifications
-
-**Example:**
-```python
-@sdk.register_one_way_handler("notification_agent")
-async def handle_notification(message: dict, context: HandlerContext):
-    print(f"Notification received: {message['title']}")
-    # No return value - fire and forget
-```
-
-#### Conversation Handler Registration
-
-```python
-def register_conversation_handler(agent_external_id: str) -> Callable
-```
-
-Register a conversation handler for an agent. Conversation handlers process request-response messages where the sender blocks and waits for the handler's response. This is synchronous from the sender's perspective.
-
-**Parameters:**
-- `agent_external_id` (str): The agent's external ID
-
-**Returns:** Decorator function
-
-**Handler Signature:**
-```python
-async def handler(message: T, context: HandlerContext) -> T:
-    # Process request and return response
-    return response_message
-```
-
-**Use Cases:**
-- Request-response patterns
-- API-like interactions
-- Q&A and support systems
-- Task processing with results
-
-**Example:**
-```python
-@sdk.register_conversation_handler("support_agent")
-async def handle_query(message: dict, context: HandlerContext) -> dict:
-    question = message['question']
-    answer = await process_question(question)
-    return {"answer": answer}  # Sender receives this response
-```
-
-#### Meeting Handler Registration
-
-```python
-def register_meeting_handler(agent_external_id: str) -> Callable
-```
-
-Register a meeting handler for an agent. Meeting handlers process messages during active meetings when it's the agent's turn to speak. The handler is invoked in the context of a multi-agent meeting with turn-based coordination.
-
-**Parameters:**
-- `agent_external_id` (str): The agent's external ID
-
-**Returns:** Decorator function
-
-**Handler Signature:**
-```python
-async def handler(message: T, context: HandlerContext) -> Optional[T]:
-    # Process meeting message and optionally return response
-    return response_message  # Optional
-```
-
-**Use Cases:**
-- Multi-agent discussions
-- Round-robin collaboration
-- Brainstorming sessions
-- Panel discussions
-
-**Example:**
-```python
-@sdk.register_meeting_handler("participant_agent")
-async def handle_meeting_turn(message: dict, context: HandlerContext) -> dict:
-    meeting_id = context.meeting_id
-    # Process meeting message
-    return {"contribution": "My thoughts are..."}
-```
-
-#### System Handler Registration
-
-```python
-def register_system_handler() -> Callable
-```
-
-Register a global system message handler. System handlers process internal messages like timeouts, errors, and system events. This is a global handler (not agent-specific) that receives system-level notifications.
-
-**Returns:** Decorator function
-
-**Handler Signature:**
-```python
-async def handler(message: dict, context: HandlerContext) -> None:
-    # Process system message
-    pass
-```
-
-**Use Cases:**
-- Timeout notifications
-- Error handling and recovery
-- System monitoring
-- Health checks
-
-**Example:**
-```python
-@sdk.register_system_handler()
-async def handle_system_event(message: dict, context: HandlerContext) -> None:
-    if message.get("type") == "timeout":
-        logger.warning(f"Agent {context.recipient_external_id} timed out")
-    elif message.get("type") == "error":
-        logger.error(f"System error: {message.get('error')}")
+async def search_messages(
+    search_query: str,
+    sender_id: Optional[str] = None,
+    recipient_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    meeting_id: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0
+) -> List[Dict[str, Any]]:
+    """
+    Search messages using full-text search with optional context filtering.
+    
+    Uses PostgreSQL websearch_to_tsquery for ranking and relevance.
+    
+    Args:
+        search_query: Full-text search query (supports AND, OR, NOT, phrases)
+        sender_id: Optional filter by sender's external ID
+        recipient_id: Optional filter by recipient's external ID
+        session_id: Optional filter by conversation session ID
+        meeting_id: Optional filter by meeting ID
+        limit: Maximum number of results (default 50, max 500)
+        offset: Pagination offset (default 0)
+    
+    Returns:
+        List of message dictionaries with id, sender, recipient, content, 
+        timestamp, and relevance ranking
+    
+    Raises:
+        ValueError: If search_query is empty or limit > 500
+        RuntimeError: If SDK not initialized
+    
+    Example:
+        results = await sdk.search_messages(
+            "database migration",
+            sender_id="alice",
+            limit=20
+        )
+        for msg in results:
+            print(f"Match: {msg['content']} (rank: {msg['ts_rank']})")
+    """
 ```
 
 #### Event Handler Registration
 
 ```python
-def register_event_handler(event_type: MeetingEventType) -> Callable
+def register_event_handler(self, event_type: MeetingEventType) -> Callable:
+    """
+    Decorator for registering meeting event handlers.
+    
+    Args:
+        event_type: Type of meeting event to handle
+    
+    Returns:
+        Decorator function
+    
+    Raises:
+        ValueError: If event_type is invalid
+    
+    Example:
+        @sdk.register_event_handler(MeetingEventType.TURN_CHANGED)
+        async def on_turn_changed(event: MeetingEventPayload) -> None:
+            print(f"Turn changed to: {event.data['current_speaker_id']}")
+    """
 ```
 
-Register an event handler for meeting lifecycle events. Event handlers are invoked when specific meeting events occur (meeting started, turn changed, meeting ended, etc.). These are type-safe handlers that receive structured event data.
-
-**Parameters:**
-- `event_type` (MeetingEventType): Type of meeting event to handle
-  - `MEETING_STARTED` - Meeting has begun
-  - `TURN_CHANGED` - Speaking turn has changed
-  - `TURN_TIMEOUT` - Current speaker exceeded time limit
-  - `PARTICIPANT_JOINED` - New participant joined
-  - `PARTICIPANT_LEFT` - Participant left meeting
-  - `MEETING_ENDED` - Meeting has concluded
-  - `MEETING_ERROR` - Error occurred in meeting
-
-**Returns:** Decorator function
-
-**Handler Signature:**
-```python
-async def handler(event: MeetingEvent) -> None:
-    # event.meeting_id: UUID
-    # event.timestamp: datetime
-    # event.data: Type-safe event data (varies by event type)
-    pass
-```
-
-**Use Cases:**
-- Meeting orchestration
-- Participant monitoring
-- Meeting analytics
-- Automated facilitation
-
-**Example:**
-```python
-from agent_messaging.handlers import MeetingEventType
-from agent_messaging.models import TurnChangedEventData
-
-@sdk.register_event_handler(MeetingEventType.TURN_CHANGED)
-async def on_turn_changed(event: MeetingEvent):
-    data: TurnChangedEventData = event.data
-    print(f"Meeting {event.meeting_id}: Turn changed")
-    print(f"Previous: {data.previous_speaker_id}")
-    print(f"Current: {data.current_speaker_id}")
-
-@sdk.register_event_handler(MeetingEventType.MEETING_ENDED)
-async def on_meeting_ended(event: MeetingEvent):
-    print(f"Meeting {event.meeting_id} has ended")
-```
-
-#### Handler Context
-
-All handlers receive a `HandlerContext` object with information about the message:
-
-```python
-class HandlerContext:
-    sender_external_id: str          # Who sent the message
-    recipient_external_id: str       # Who is receiving
-    session_id: Optional[UUID]       # Conversation session ID
-    meeting_id: Optional[UUID]       # Meeting ID (for meetings)
-    message_type: str                # Type of message
-```
-
-#### Checking Handler Registration
-
-```python
-def has_handler() -> bool
-```
-
-Check if any handler is registered.
-
-**Returns:** True if at least one handler is registered
-
-### Messaging Properties
+#### Messaging Properties
 
 ```python
 @property
-def one_way(self) -> OneWayMessenger[T]
-```
+def one_way(self) -> OneWayMessenger[T_OneWay]:
+    """
+    Access one-way messaging interface.
+    
+    Returns:
+        OneWayMessenger instance for sending fire-and-forget messages
+    
+    Raises:
+        RuntimeError: If SDK not initialized
+    """
 
-One-way messaging interface.
-
-```python
 @property
-def conversation(self) -> Conversation[T]
-```
+def conversation(self) -> Conversation[T_Conversation]:
+    """
+    Access unified conversation interface (sync and async).
+    
+    Returns:
+        Conversation instance for request-response and async messaging
+    
+    Raises:
+        RuntimeError: If SDK not initialized
+    """
 
-Unified conversation interface (sync and async patterns).
-
-```python
 @property
-def meeting(self) -> MeetingManager[T]
+def meeting(self) -> MeetingManager[T_Meeting]:
+    """
+    Access meeting management interface.
+    
+    Returns:
+        MeetingManager instance for multi-agent meetings
+    
+    Raises:
+        RuntimeError: If SDK not initialized
+    """
 ```
-
-Meeting management interface.
 
 ---
 
-## OneWayMessenger
+## Messaging Classes
 
-Fire-and-forget messaging for one-to-many notifications.
+### OneWayMessenger[T]
 
-### Constructor
-
-```python
-OneWayMessenger[T](
-    handler_registry: HandlerRegistry,
-    message_repo: MessageRepository,
-    agent_repo: AgentRepository
-)
-```
-
-### Methods
+One-to-many fire-and-forget messaging.
 
 ```python
 async def send(
@@ -403,86 +343,58 @@ async def send(
     recipient_external_ids: List[str],
     message: T,
     metadata: Optional[Dict[str, Any]] = None
-) -> List[str]
-```
+) -> List[str]:
+    """
+    Send a one-way message to multiple recipients.
+    
+    Handler is invoked asynchronously for each recipient.
+    Message is stored even if handler invocation fails.
+    
+    Args:
+        sender_external_id: External ID of sender
+        recipient_external_ids: List of recipient external IDs
+        message: Message payload (T type)
+        metadata: Optional custom metadata dict for tracking
+    
+    Returns:
+        List of message IDs (UUIDs as strings)
+    
+    Raises:
+        ValueError: If parameters are invalid
+        AgentNotFoundError: If sender or any recipient doesn't exist
+        NoHandlerRegisteredError: If no handler is registered
+    
+    Example:
+        msg_ids = await sdk.one_way.send(
+            "notification_service",
+            ["alice", "bob", "charlie"],
+            Notification(type="alert", text="System maintenance"),
+            metadata={"priority": "high"}
+        )
+        print(f"Sent {len(msg_ids)} messages")
+    """
 
-Send one-way message to multiple recipients (broadcast).
-
-**Parameters:**
-- `sender_external_id` (str): Sender external ID
-- `recipient_external_ids` (List[str]): List of recipient external IDs
-- `message` (T): Message content
-- `metadata` (Optional[Dict[str, Any]]): Optional custom metadata to attach (for tracking, filtering, etc.)
-
-**Returns:** List of message UUIDs (one per recipient)
-
-**Raises:** ValueError, AgentNotFoundError, NoHandlerRegisteredError
-
-**Example:**
-```python
-message_ids = await sdk.one_way.send(
-    sender_external_id="notification_service",
-    recipient_external_ids=["alice", "bob"],
-    message={"type": "alert", "content": "System update"},
-    metadata={"priority": "high", "request_id": "req-123"}
-)
-```
-
-**Architecture Note:** Updated to support one-to-many pattern. Handlers are invoked
-concurrently for all recipients.
-
-### Query Methods
-
-```python
 async def get_sent_messages(
     sender_external_id: str,
     limit: int = 100,
     offset: int = 0,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None
-) -> List[Dict[str, Any]]
-```
+) -> List[Dict[str, Any]]:
+    """
+    Get messages sent by an agent.
+    
+    Args:
+        sender_external_id: Sender's external ID
+        limit: Maximum results (default 100)
+        offset: Pagination offset
+        date_from: Optional start date filter
+        date_to: Optional end date filter
+    
+    Returns:
+        List of message dictionaries
+    """
 
-Get one-way messages sent by an agent.
-
-**Parameters:**
-- `sender_external_id` (str): External ID of sender agent
-- `limit` (int): Maximum number of messages to return (default: 100)
-- `offset` (int): Offset for pagination (default: 0)
-- `date_from` (Optional[datetime]): Optional start date filter (inclusive)
-- `date_to` (Optional[datetime]): Optional end date filter (inclusive)
-
-**Returns:** List of message dictionaries with sender/recipient info and content
-
-**Response Structure:**
-```python
-[
-    {
-        "message_id": str,
-        "sender_id": str,
-        "recipient_id": str,
-        "content": dict,
-        "read_at": Optional[datetime],
-        "created_at": datetime,
-        "metadata": dict
-    },
-    ...
-]
-```
-
-**Raises:** ValueError, AgentNotFoundError
-
-**Example:**
-```python
-messages = await sdk.one_way.get_sent_messages("alice")
-recent = await sdk.one_way.get_sent_messages(
-    "alice",
-    date_from=datetime(2025, 1, 1),
-    date_to=datetime(2025, 1, 31)
-)
-```
-
-```python
 async def get_received_messages(
     recipient_external_id: str,
     include_read: bool = True,
@@ -490,109 +402,58 @@ async def get_received_messages(
     offset: int = 0,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None
-) -> List[Dict[str, Any]]
-```
+) -> List[Dict[str, Any]]:
+    """
+    Get messages received by an agent.
+    
+    Args:
+        recipient_external_id: Recipient's external ID
+        include_read: Include already read messages
+        limit: Maximum results
+        offset: Pagination offset
+        date_from: Optional start date filter
+        date_to: Optional end date filter
+    
+    Returns:
+        List of message dictionaries
+    """
 
-Get one-way messages received by an agent.
-
-**Parameters:**
-- `recipient_external_id` (str): External ID of recipient agent
-- `include_read` (bool): Include already-read messages (default: True)
-- `limit` (int): Maximum number of messages to return (default: 100)
-- `offset` (int): Offset for pagination (default: 0)
-- `date_from` (Optional[datetime]): Optional start date filter (inclusive)
-- `date_to` (Optional[datetime]): Optional end date filter (inclusive)
-
-**Returns:** List of message dictionaries with sender/recipient info and content
-
-**Response Structure:** Same as `get_sent_messages`
-
-**Raises:** ValueError, AgentNotFoundError
-
-**Example:**
-```python
-all_messages = await sdk.one_way.get_received_messages("bob")
-unread = await sdk.one_way.get_received_messages(
-    "bob",
-    include_read=False
-)
-```
-
-```python
 async def mark_messages_read(
     recipient_external_id: str,
     sender_external_id: Optional[str] = None
-) -> int
-```
+) -> int:
+    """
+    Mark messages as read.
+    
+    Args:
+        recipient_external_id: Recipient's external ID
+        sender_external_id: Optional filter by specific sender
+    
+    Returns:
+        Number of messages marked as read
+    """
 
-Mark one-way messages as read for a recipient.
-
-**Parameters:**
-- `recipient_external_id` (str): External ID of recipient agent
-- `sender_external_id` (Optional[str]): If provided, only mark messages from this sender as read
-
-**Returns:** Number of messages marked as read
-
-**Raises:** ValueError, AgentNotFoundError
-
-**Example:**
-```python
-# Mark all received messages as read
-count = await sdk.one_way.mark_messages_read("bob")
-
-# Mark messages from specific sender as read
-count = await sdk.one_way.mark_messages_read("bob", sender_external_id="alice")
-```
-
-```python
 async def get_message_count(
     agent_external_id: str,
     role: str = "recipient",
     read_status: Optional[bool] = None
-) -> int
+) -> int:
+    """
+    Get count of messages with optional filters.
+    
+    Args:
+        agent_external_id: Agent's external ID
+        role: "recipient" or "sender"
+        read_status: None=all, True=read, False=unread
+    
+    Returns:
+        Message count
+    """
 ```
 
-Get count of one-way messages for an agent.
+### Conversation[T]
 
-**Parameters:**
-- `agent_external_id` (str): Agent external ID
-- `role` (str): Either "sender" or "recipient" (default: "recipient")
-- `read_status` (Optional[bool]): Filter by read status (None = all, True = read only, False = unread only)
-
-**Returns:** Count of messages matching criteria
-
-**Raises:** ValueError, AgentNotFoundError
-
-**Example:**
-```python
-# Total received messages
-total = await sdk.one_way.get_message_count("bob")
-
-# Unread messages
-unread = await sdk.one_way.get_message_count("bob", read_status=False)
-
-# Messages sent by alice
-sent = await sdk.one_way.get_message_count("alice", role="sender")
-```
-
----
-
-## Conversation
-
-Unified conversation class supporting both sync and async messaging patterns.
-
-### Constructor
-
-```python
-Conversation[T](
-    handler_registry: HandlerRegistry,
-    message_repo: MessageRepository,
-    session_repo: SessionRepository,
-    agent_repo: AgentRepository
-)
-```
-
-### Methods
+Unified interface for synchronous and asynchronous conversations.
 
 ```python
 async def send_and_wait(
@@ -601,679 +462,627 @@ async def send_and_wait(
     message: T,
     timeout: float = 30.0,
     metadata: Optional[Dict[str, Any]] = None
-) -> T
-```
+) -> T:
+    """
+    Send message and wait for response (blocking).
+    
+    Acquires PostgreSQL advisory lock for coordination.
+    Handler is invoked immediately. If handler responds within 100ms,
+    response is auto-sent. Otherwise, waits for async response.
+    
+    Args:
+        sender_external_id: Sender's external ID
+        recipient_external_id: Recipient's external ID
+        message: Message payload
+        timeout: Max seconds to wait for response (default 30)
+        metadata: Optional custom metadata
+    
+    Returns:
+        Response message from recipient
+    
+    Raises:
+        TimeoutError: If response not received within timeout
+        AgentNotFoundError: If agents don't exist
+        NoHandlerRegisteredError: If no handler registered
+        SessionLockError: If lock acquisition fails
+    
+    Example:
+        response = await sdk.conversation.send_and_wait(
+            "alice",
+            "support_agent",
+            Query(text="How do I reset password?"),
+            timeout=60.0
+        )
+        print(f"Response: {response.answer}")
+    """
 
-Send message and block until response (synchronous pattern).
-
-**Parameters:**
-- `sender_external_id` (str): Sender external ID
-- `recipient_external_id` (str): Recipient external ID
-- `message` (T): Request message
-- `timeout` (float): Max wait time in seconds (default: 30.0)
-- `metadata` (Optional[Dict[str, Any]]): Optional custom metadata to attach
-
-**Returns:** Response message
-
-**Raises:** ValueError, AgentNotFoundError, NoHandlerRegisteredError, TimeoutError, SessionStateError
-
-**Example:**
-```python
-response = await sdk.conversation.send_and_wait(
-    sender_external_id="customer",
-    recipient_external_id="support_agent",
-    message=SupportQuery(question="How do I reset my password?"),
-    timeout=60.0,
-    metadata={"request_id": "req-123", "priority": "high"}
-)
-```
-
-```python
 async def send_no_wait(
     sender_external_id: str,
     recipient_external_id: str,
     message: T,
     metadata: Optional[Dict[str, Any]] = None
-) -> None
-```
+) -> None:
+    """
+    Send message without waiting for response (non-blocking).
+    
+    Returns immediately. Recipient handler processes asynchronously.
+    
+    Args:
+        sender_external_id: Sender's external ID
+        recipient_external_id: Recipient's external ID
+        message: Message payload
+        metadata: Optional custom metadata
+    
+    Raises:
+        ValueError: If parameters invalid
+        AgentNotFoundError: If agents don't exist
+    
+    Example:
+        await sdk.conversation.send_no_wait(
+            "alice",
+            "bob",
+            TaskRequest(task="process_data")
+        )
+    """
 
-Send message without blocking (asynchronous pattern).
+async def end_conversation(
+    agent_external_id: str,
+    other_agent_external_id: str
+) -> None:
+    """
+    End an active conversation session.
+    
+    Args:
+        agent_external_id: One agent's external ID
+        other_agent_external_id: Other agent's external ID
+    
+    Raises:
+        SessionStateError: If session not found or already ended
+    """
 
-**Parameters:**
-- `sender_external_id` (str): Sender external ID
-- `recipient_external_id` (str): Recipient external ID
-- `message` (T): Message content
-- `metadata` (Optional[Dict[str, Any]]): Optional custom metadata to attach
-
-**Raises:** ValueError, AgentNotFoundError
-
-**Example:**
-```python
-await sdk.conversation.send_no_wait(
-    sender_external_id="alice",
-    recipient_external_id="bob",
-    message=ChatMessage(text="Hello Bob!"),
-    metadata={"message_type": "greeting"}
-)
-```
-
-```python
 async def get_unread_messages(
     agent_external_id: str
-) -> List[T]
-```
+) -> List[T]:
+    """
+    Get all unread messages for an agent.
+    
+    Returns:
+        List of unread messages
+    """
 
-Get all unread messages for an agent.
-
-**Parameters:**
-- `agent_external_id` (str): Agent external ID
-
-**Returns:** List of unread messages
-
-**Raises:** AgentNotFoundError
-
-```python
 async def get_or_wait_for_response(
-    agent_external_id: str,
-    other_agent_external_id: str,
-    timeout: Optional[float] = None
-) -> Optional[T]
-```
-
-Check for messages from specific agent, wait if none available.
-
-**Parameters:**
-- `agent_external_id` (str): Receiving agent external ID
-- `other_agent_external_id` (str): Sending agent external ID
-- `timeout` (Optional[float]): Max wait time (None = wait forever)
-
-**Returns:** Message content or None if timeout
-
-**Raises:** AgentNotFoundError, TimeoutError
-
-```python
-async def end_conversation(
     agent_a_external_id: str,
-    agent_b_external_id: str
-) -> None
-```
+    agent_b_external_id: str,
+    timeout: Optional[float] = None
+) -> Optional[T]:
+    """
+    Get response from active conversation or wait for one.
+    
+    Checks message queue first, then waits with timeout.
+    
+    Args:
+        agent_a_external_id: First agent
+        agent_b_external_id: Second agent
+        timeout: Optional timeout in seconds
+    
+    Returns:
+        Response message or None if timeout
+    """
 
-End conversation between two agents.
-
-**Parameters:**
-- `agent_a_external_id` (str): First agent external ID
-- `agent_b_external_id` (str): Second agent external ID
-
-**Raises:** ValueError, AgentNotFoundError, RuntimeError
-
-```python
 async def resume_agent_handler(
     agent_external_id: str
-) -> None
-```
+) -> None:
+    """
+    Resume handler execution for waiting agent.
+    
+    Used in async conversation pattern to trigger processing.
+    
+    Args:
+        agent_external_id: Agent's external ID
+    """
 
-Resume agent handler for system recovery (process unread messages).
+async def get_active_sessions(
+    agent_external_id: str
+) -> List[Dict[str, Any]]:
+    """
+    Get all active conversation sessions for an agent.
+    
+    Returns:
+        List of session information dictionaries
+    """
 
-**Parameters:**
-- `agent_external_id` (str): Agent external ID
+async def get_messages_in_session(
+    session_id: str,
+    include_read: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    Get all messages in a conversation session.
+    
+    Args:
+        session_id: Session UUID
+        include_read: Include read messages
+    
+    Returns:
+        List of messages in chronological order
+    """
 
-**Raises:** AgentNotFoundError
-
-**Architecture Note:** Unified SyncConversation and AsyncConversation into single
-Conversation class. Sessions intelligently handle both blocking waits and message
-queues based on the method called.
-
-### Query Methods
-
-```python
 async def get_conversation_history(
     session_id: str
-) -> List[Dict[str, Any]]
-```
+) -> List[Dict[str, Any]]:
+    """
+    Get full conversation history for a session.
+    
+    Args:
+        session_id: Session UUID
+    
+    Returns:
+        Complete conversation with all messages and metadata
+    """
 
-Get full conversation history with formatted message details.
-
-**Parameters:**
-- `session_id` (str): Session ID (UUID as string)
-
-**Returns:** List of messages with sender info, timestamps, and content
-
-**Raises:** ValueError
-
-**Example:**
-```python
-history = await sdk.conversation.get_conversation_history(session_id)
-for msg in history:
-    print(f"{msg['sender_id']}: {msg['content']}")
-```
-
-```python
 async def get_session_info(
     session_id: str
-) -> Dict[str, Any]
-```
+) -> Dict[str, Any]:
+    """
+    Get detailed information about a session.
+    
+    Includes participants, status, message counts, unread count.
+    
+    Args:
+        session_id: Session UUID
+    
+    Returns:
+        Session information dictionary
+    """
 
-Get detailed session information including statistics.
-
-**Parameters:**
-- `session_id` (str): Session ID (UUID as string)
-
-**Returns:** Dictionary with session details, participants, and message counts
-
-**Response Structure:**
-```python
-{
-    "session_id": str,
-    "agent_a": {"id": str, "name": str},
-    "agent_b": {"id": str, "name": str},
-    "status": str,
-    "is_locked": bool,
-    "locked_by": Optional[str],
-    "message_count": int,
-    "read_count": int,
-    "unread_count": int,
-    "created_at": datetime,
-    "updated_at": datetime,
-    "ended_at": Optional[datetime]
-}
-```
-
-**Raises:** ValueError
-
-**Example:**
-```python
-info = await sdk.conversation.get_session_info(session_id)
-print(f"Status: {info['status']}")
-print(f"Unread: {info['unread_count']}")
-```
-
-```python
 async def get_session_statistics(
     agent_id: str
-) -> Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Get conversation statistics for an agent.
+    
+    Args:
+        agent_id: Agent UUID or external ID
+    
+    Returns:
+        Statistics including active sessions, unread count, total messages
+    """
 ```
 
-Get message statistics for an agent across all sessions.
+### MeetingManager[T]
 
-**Parameters:**
-- `agent_id` (str): Agent external ID
-
-**Returns:** Dictionary with conversation statistics
-
-**Response Structure:**
-```python
-{
-    "agent_id": str,
-    "total_conversations": int,
-    "total_messages": int,
-    "unread_count": int,
-    "sent_count": int,
-    "received_count": int,
-    "unique_conversation_partners": int
-}
-```
-
-**Raises:** AgentNotFoundError
-
-**Example:**
-```python
-stats = await sdk.conversation.get_session_statistics("alice")
-print(f"Alice has {stats['total_conversations']} conversations")
-print(f"Total messages sent: {stats['sent_count']}")
-```
-
----
-
-## MeetingManager
-
-Multi-agent meetings with turn-based coordination.
-
-### Constructor
-
-```python
-MeetingManager[T](
-    meeting_repo: MeetingRepository,
-    message_repo: MessageRepository,
-    agent_repo: AgentRepository,
-    event_handler: MeetingEventHandler
-)
-```
-
-
-### Methods
+Multi-agent turn-based meeting coordination.
 
 ```python
 async def create_meeting(
     organizer_external_id: str,
     participant_external_ids: List[str],
     turn_duration: Optional[float] = None
-) -> UUID
-```
+) -> UUID:
+    """
+    Create a new meeting.
+    
+    Args:
+        organizer_external_id: External ID of meeting organizer
+        participant_external_ids: List of participant external IDs
+        turn_duration: Optional duration per turn in seconds
+    
+    Returns:
+        UUID of created meeting
+    
+    Raises:
+        ValueError: If parameters invalid
+        AgentNotFoundError: If organizer or participant not found
+    
+    Example:
+        meeting_id = await sdk.meeting.create_meeting(
+            "alice",
+            ["bob", "charlie", "diana"],
+            turn_duration=30.0
+        )
+    """
 
-Create new meeting.
+async def get_meeting(meeting_id: UUID) -> Optional[Meeting]:
+    """
+    Get meeting details.
+    
+    Args:
+        meeting_id: Meeting UUID
+    
+    Returns:
+        Meeting object or None if not found
+    """
 
-**Parameters:**
-- `organizer_external_id` (str): Organizer external ID
-- `participant_external_ids` (List[str]): Participant external IDs
-- `turn_duration` (Optional[float]): Seconds per turn
+async def get_participants(meeting_id: UUID) -> List[MeetingParticipant]:
+    """
+    Get list of participants in meeting.
+    
+    Args:
+        meeting_id: Meeting UUID
+    
+    Returns:
+        List of participant objects with status and join info
+    """
 
-**Returns:** Meeting UUID
+async def update_participant_status(
+    meeting_id: UUID,
+    agent_id: UUID,
+    status: ParticipantStatus
+) -> None:
+    """
+    Update participant status.
+    
+    Args:
+        meeting_id: Meeting UUID
+        agent_id: Agent UUID
+        status: New participant status
+    """
 
-**Raises:** AgentNotFoundError
-
-```python
 async def attend_meeting(
     agent_external_id: str,
     meeting_id: UUID
-) -> bool
-```
+) -> bool:
+    """
+    Mark agent as attending meeting.
+    
+    Args:
+        agent_external_id: Agent's external ID
+        meeting_id: Meeting UUID
+    
+    Returns:
+        True if joined successfully
+    """
 
-Join meeting as participant.
-
-**Parameters:**
-- `agent_external_id` (str): Agent external ID
-- `meeting_id` (UUID): Meeting UUID
-
-**Returns:** True if joined successfully
-
-**Raises:** AgentNotFoundError, MeetingNotFoundError
-
-```python
 async def start_meeting(
-    organizer_external_id: str,
-    meeting_id: UUID,
-    initial_message: Optional[T] = None,
-    next_speaker: Optional[str] = None
-) -> None
-```
+    host_external_id: str,
+    meeting_id: UUID
+) -> None:
+    """
+    Start a meeting (organizer only).
+    
+    Begins turn-based speaking with first participant.
+    
+    Args:
+        host_external_id: Organizer's external ID
+        meeting_id: Meeting UUID
+    
+    Raises:
+        MeetingPermissionError: If not organizer
+        MeetingStateError: If meeting not in ready state
+    """
 
-Start meeting.
-
-**Parameters:**
-- `organizer_external_id` (str): Organizer external ID
-- `meeting_id` (UUID): Meeting UUID
-- `initial_message` (Optional[T]): Opening message
-- `next_speaker` (Optional[str]): First speaker external ID
-
-**Raises:** MeetingPermissionError, MeetingNotFoundError
-
-```python
 async def speak(
-    speaker_external_id: str,
+    agent_external_id: str,
     meeting_id: UUID,
     message: T,
-    next_speaker: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None
-) -> UUID
-```
+) -> UUID:
+    """
+    Speak in meeting during your turn.
+    
+    Requires having the speaking turn (lock coordination).
+    
+    Args:
+        agent_external_id: Agent's external ID
+        meeting_id: Meeting UUID
+        message: Message payload
+        metadata: Optional custom metadata
+    
+    Returns:
+        UUID of message
+    
+    Raises:
+        NotYourTurnError: If agent doesn't have the turn
+        MeetingNotActiveError: If meeting not active
+    """
 
-Speak in meeting (when it's your turn).
+async def end_meeting(
+    host_external_id: str,
+    meeting_id: UUID
+) -> None:
+    """
+    End a meeting (organizer only).
+    
+    Args:
+        host_external_id: Organizer's external ID
+        meeting_id: Meeting UUID
+    
+    Raises:
+        MeetingPermissionError: If not organizer
+    """
 
-**Parameters:**
-- `speaker_external_id` (str): Speaker external ID
-- `meeting_id` (UUID): Meeting UUID
-- `message` (T): Message content
-- `next_speaker` (Optional[str]): Next speaker external ID
-- `metadata` (Optional[Dict[str, Any]]): Optional custom metadata to attach
-
-**Returns:** Message UUID
-
-**Raises:** ValueError, AgentNotFoundError, MeetingError, MeetingNotFoundError
-
-**Example:**
-```python
-message_id = await sdk.meeting.speak(
-    speaker_external_id="alice",
-    meeting_id=meeting_id,
-    message=ContributionMessage(text="I think we should..."),
-    next_speaker="bob",
-    metadata={"speaking_duration": 45.2}
-)
-```
-
-```python
-async def pass_turn(
+async def leave_meeting(
     agent_external_id: str,
     meeting_id: UUID
-) -> None
-```
+) -> None:
+    """
+    Leave a meeting.
+    
+    Args:
+        agent_external_id: Agent's external ID
+        meeting_id: Meeting UUID
+    """
 
-Pass turn to next participant.
+async def get_meeting_status(meeting_id: UUID) -> Optional[Dict]:
+    """
+    Get current meeting status.
+    
+    Args:
+        meeting_id: Meeting UUID
+    
+    Returns:
+        Meeting status information
+    """
 
-**Parameters:**
-- `agent_external_id` (str): Current speaker external ID
-- `meeting_id` (UUID): Meeting UUID
+async def get_meeting_history(meeting_id: UUID) -> List[Dict]:
+    """
+    Get all messages in a meeting.
+    
+    Args:
+        meeting_id: Meeting UUID
+    
+    Returns:
+        Chronological list of messages
+    """
 
-**Raises:** MeetingError, MeetingNotFoundError
+async def get_meeting_details(meeting_id: str) -> Dict[str, Any]:
+    """
+    Get detailed meeting information.
+    
+    Includes participants, status, timing, message counts.
+    
+    Args:
+        meeting_id: Meeting UUID as string
+    
+    Returns:
+        Detailed meeting information
+    """
 
-```python
-async def end_meeting(
-    organizer_external_id: str,
-    meeting_id: UUID
-) -> None
-```
+async def get_participant_history(meeting_id: str) -> List[Dict[str, Any]]:
+    """
+    Get full participant history.
+    
+    Args:
+        meeting_id: Meeting UUID as string
+    
+    Returns:
+        List of all participants with join/leave times and status
+    """
 
-End meeting (organizer only).
+async def get_meeting_statistics(agent_id: str) -> Dict[str, Any]:
+    """
+    Get meeting statistics for an agent.
+    
+    Args:
+        agent_id: Agent UUID or external ID
+    
+    Returns:
+        Aggregate statistics for agent's meetings
+    """
 
-**Parameters:**
-- `organizer_external_id` (str): Organizer external ID
-- `meeting_id` (UUID): Meeting UUID
+async def get_participation_analysis(meeting_id: str) -> Dict[str, Any]:
+    """
+    Get detailed participation analysis.
+    
+    Includes speaking time, message counts, participation rates per agent.
+    
+    Args:
+        meeting_id: Meeting UUID as string
+    
+    Returns:
+        Per-agent participation metrics
+    """
 
-**Raises:** MeetingPermissionError, MeetingNotFoundError
+async def get_meeting_timeline(meeting_id: str) -> Dict[str, Any]:
+    """
+    Get complete meeting timeline.
+    
+    Chronological view of all events and messages.
+    
+    Args:
+        meeting_id: Meeting UUID as string
+    
+    Returns:
+        Timeline with timestamps for all events
+    """
 
-```python
-async def get_meeting_status(meeting_id: UUID) -> Dict[str, Any]
-```
-
-Get meeting status and participants.
-
-**Parameters:**
-- `meeting_id` (UUID): Meeting UUID
-
-**Returns:** Status dictionary with participants, current speaker, etc.
-
-**Raises:** MeetingNotFoundError
-
-```python
-async def get_meeting_history(meeting_id: UUID) -> List[Dict[str, Any]]
-```
-
-Get meeting message history.
-
-**Parameters:**
-- `meeting_id` (UUID): Meeting UUID
-
-**Returns:** List of message dictionaries
-
-**Raises:** MeetingNotFoundError
-
-### Query Methods
-
-```python
-async def get_meeting_details(
-    meeting_id: str
-) -> Dict[str, Any]
-```
-
-Get detailed meeting information including participants and statistics.
-
-**Parameters:**
-- `meeting_id` (str): Meeting ID (UUID as string)
-
-**Returns:** Dictionary with meeting details and current status
-
-**Response Structure:**
-```python
-{
-    "meeting_id": str,
-    "host": {"id": str, "name": str},
-    "status": str,
-    "current_speaker": Optional[{"id": str, "name": str}],
-    "turn_duration_seconds": Optional[float],
-    "turn_started_at": Optional[datetime],
-    "created_at": datetime,
-    "started_at": Optional[datetime],
-    "ended_at": Optional[datetime],
-    "participant_count": int,
-    "attending_count": int,
-    "message_count": int
-}
-```
-
-**Raises:** ValueError, MeetingNotFoundError
-
-**Example:**
-```python
-details = await sdk.meeting.get_meeting_details(meeting_id)
-print(f"Host: {details['host']['name']}")
-print(f"Status: {details['status']}")
-print(f"Participants: {details['participant_count']}")
-```
-
-```python
-async def get_participant_history(
-    meeting_id: str
-) -> List[Dict[str, Any]]
-```
-
-Get full participant history for a meeting.
-
-**Parameters:**
-- `meeting_id` (str): Meeting ID (UUID as string)
-
-**Returns:** List of participants with detailed information
-
-**Response Structure:**
-```python
-[
-    {
-        "participant_id": str,
-        "agent_id": str,
-        "agent_name": str,
-        "status": str,
-        "join_order": int,
-        "is_locked": bool,
-        "joined_at": Optional[datetime],
-        "left_at": Optional[datetime]
-    },
-    ...
-]
-```
-
-**Raises:** ValueError, MeetingNotFoundError
-
-**Example:**
-```python
-participants = await sdk.meeting.get_participant_history(meeting_id)
-for p in participants:
-    print(f"{p['agent_name']} (order: {p['join_order']})")
-```
-
-```python
-async def get_meeting_statistics(
-    agent_id: str
-) -> Dict[str, Any]
-```
-
-Get meeting statistics for an agent (as organizer or participant).
-
-**Parameters:**
-- `agent_id` (str): Agent external ID
-
-**Returns:** Dictionary with meeting statistics
-
-**Response Structure:**
-```python
-{
-    "agent_id": str,
-    "hosted_meetings": int,
-    "participated_meetings": int,
-    "active_hosted": int,
-    "total_messages_sent": int,
-    "meetings_spoke_in": int,
-    "avg_meeting_duration_seconds": Optional[float]
-}
-```
-
-**Raises:** AgentNotFoundError
-
-**Example:**
-```python
-stats = await sdk.meeting.get_meeting_statistics("alice")
-print(f"Hosted meetings: {stats['hosted_meetings']}")
-print(f"Avg duration: {stats['avg_meeting_duration_seconds']}s")
+async def get_turn_statistics(meeting_id: str) -> Dict[str, Any]:
+    """
+    Get turn-taking analysis.
+    
+    Turn counts, order, duration per agent.
+    
+    Args:
+        meeting_id: Meeting UUID as string
+    
+    Returns:
+        Per-agent turn statistics
+    """
 ```
 
 ---
 
-## Exceptions
+## Handler System
 
-### Base Exceptions
+### Global Handler Registration
+
+Handlers are registered globally and apply to all agents of a given type.
 
 ```python
-class AgentMessagingError(Exception):
-    """Base exception for all SDK errors."""
-    pass
+from agent_messaging import (
+    register_one_way_handler,
+    register_conversation_handler,
+    register_meeting_handler,
+    register_system_handler,
+    MessageContext
+)
+
+@register_one_way_handler
+async def handle_notification(message: dict, context: MessageContext) -> None:
+    """
+    Handle one-way notifications.
+    
+    Called asynchronously. Return value ignored.
+    """
+    print(f"Received from {context.sender_id}: {message}")
+
+@register_conversation_handler
+async def handle_query(message: dict, context: MessageContext) -> dict:
+    """
+    Handle synchronous conversation (request-response).
+    
+    Response is auto-sent if returned within 100ms.
+    Otherwise, must call conversation.respond() in async handler.
+    """
+    return {"answer": "Hello " + message["question"]}
+
+@register_meeting_handler
+async def handle_meeting_turn(message: dict, context: MessageContext) -> dict:
+    """
+    Handle meeting turn messages.
+    
+    Called when agent has the speaking turn in a meeting.
+    """
+    return {"contribution": "My thoughts on this..."}
+
+@register_system_handler
+async def handle_system(message: dict, context: MessageContext) -> None:
+    """
+    Handle system events (timeouts, etc).
+    
+    Used for monitoring and logging.
+    """
+    if message.get("type") == "turn_timeout":
+        print(f"Agent {context.sender_id} timed out")
 ```
 
-### Organization Exceptions
+### Handler Context
 
 ```python
-class OrganizationNotFoundError(AgentMessagingError):
-    """Organization not found."""
-    pass
-```
-
-### Agent Exceptions
-
-```python
-class AgentNotFoundError(AgentMessagingError):
-    """Agent not found."""
-    pass
-```
-
-### Handler Exceptions
-
-```python
-class NoHandlerRegisteredError(AgentMessagingError):
-    """No handler registered for agent."""
-    pass
-
-class HandlerTimeoutError(AgentMessagingError):
-    """Handler execution timed out."""
-    pass
-
-class HandlerError(AgentMessagingError):
-    """Handler execution failed."""
-    pass
-```
-
-### Session Exceptions
-
-```python
-class SessionLockError(AgentMessagingError):
-    """Session already locked by another agent."""
-    pass
-
-class SessionStateError(AgentMessagingError):
-    """Session is in invalid state for operation."""
-    pass
-```
-
-### Meeting Exceptions
-
-```python
-class MeetingNotFoundError(AgentMessagingError):
-    """Meeting not found."""
-    pass
-
-class MeetingPermissionError(AgentMessagingError):
-    """Insufficient permissions for meeting operation."""
-    pass
-
-class MeetingError(AgentMessagingError):
-    """General meeting error."""
-    pass
-```
-
-### Timeout Exceptions
-
-```python
-class TimeoutError(AgentMessagingError):
-    """Operation timed out."""
-    pass
+class MessageContext:
+    """Context passed to all handlers."""
+    sender_id: str                    # Sender's external ID
+    receiver_id: str                  # Receiver's external ID
+    message_id: Optional[UUID]        # Message UUID
+    session_id: Optional[UUID]        # Session UUID (conversations only)
+    meeting_id: Optional[UUID]        # Meeting UUID (meetings only)
+    timestamp: datetime               # When message was received
 ```
 
 ---
 
-## Models
+## Models and Data Types
 
-### Core Models
+### Organization Model
 
 ```python
-class Organization(BaseModel):
-    id: UUID
-    external_id: str
-    name: str
-    created_at: datetime
-    updated_at: datetime
+from agent_messaging import Organization
 
-class Agent(BaseModel):
-    id: UUID
-    external_id: str
-    organization_id: UUID
-    name: str
-    created_at: datetime
-    updated_at: datetime
+class Organization:
+    id: UUID                          # Internal UUID
+    external_id: str                  # External identifier
+    name: str                         # Organization name
+    created_at: datetime              # Creation timestamp
+    updated_at: datetime              # Last update timestamp
 ```
 
-### Message Models
+### Agent Model
 
 ```python
-class MessageContext(BaseModel):
-    sender_id: str
-    recipient_id: str
-    message_id: UUID
-    timestamp: datetime
-    session_id: Optional[UUID] = None
-    meeting_id: Optional[UUID] = None
+from agent_messaging import Agent
 
-class Message(BaseModel, Generic[T]):
-    id: UUID
-    sender_id: UUID
-    recipient_id: Optional[UUID]
-    session_id: Optional[UUID]
-    meeting_id: Optional[UUID]
-    message_type: MessageType
-    content: Dict[str, Any]  # JSON-serialized T
-    read_at: Optional[datetime]
-    created_at: datetime
-    metadata: Dict[str, Any]
+class Agent:
+    id: UUID                          # Internal UUID
+    external_id: str                  # External identifier
+    organization_id: UUID             # Parent organization UUID
+    name: str                         # Agent name
+    created_at: datetime              # Creation timestamp
+    updated_at: datetime              # Last update timestamp
 ```
 
-### Session Models
+### Session Model
 
 ```python
-class Session(BaseModel):
-    id: UUID
-    agent_a_id: UUID
-    agent_b_id: UUID
-    session_type: SessionType
-    status: SessionStatus
-    locked_agent_id: Optional[UUID]
-    created_at: datetime
-    updated_at: datetime
-    ended_at: Optional[datetime]
+from agent_messaging import Session, SessionStatus
+
+class Session:
+    id: UUID                          # Session UUID
+    agent_a_id: UUID                  # First agent
+    agent_b_id: UUID                  # Second agent
+    status: SessionStatus             # "active" | "waiting" | "ended"
+    locked_agent_id: Optional[UUID]   # Agent holding lock
+    created_at: datetime              # Creation time
+    updated_at: datetime              # Last update time
+    ended_at: Optional[datetime]      # End time if ended
 ```
 
-### Meeting Models
+### Meeting Model
 
 ```python
-class Meeting(BaseModel):
-    id: UUID
-    host_id: UUID
-    status: MeetingStatus
-    current_speaker_id: Optional[UUID]
-    turn_duration: Optional[float]
-    turn_started_at: Optional[datetime]
-    created_at: datetime
-    started_at: Optional[datetime]
-    ended_at: Optional[datetime]
+from agent_messaging import Meeting, MeetingStatus
 
-class MeetingParticipant(BaseModel):
-    id: UUID
-    meeting_id: UUID
-    agent_id: UUID
-    status: ParticipantStatus
-    join_order: int
-    is_locked: bool
-    joined_at: datetime
-    left_at: Optional[datetime]
+class Meeting:
+    id: UUID                          # Meeting UUID
+    host_id: UUID                     # Organizer agent UUID
+    status: MeetingStatus             # "created" | "ready" | "active" | "ended"
+    current_speaker_id: Optional[UUID] # Agent with speaking turn
+    turn_duration: Optional[float]    # Turn timeout in seconds
+    turn_started_at: Optional[datetime] # When current turn started
+    created_at: datetime              # Creation time
+    started_at: Optional[datetime]    # Start time
+    ended_at: Optional[datetime]      # End time
 ```
 
-### Event Models
+### MeetingParticipant Model
 
 ```python
+from agent_messaging import MeetingParticipant, ParticipantStatus
+
+class MeetingParticipant:
+    id: UUID                          # Participant record UUID
+    meeting_id: UUID                  # Meeting UUID
+    agent_id: UUID                    # Agent UUID
+    status: ParticipantStatus         # invited|attending|waiting|speaking|left
+    join_order: int                   # Order for round-robin turns
+    is_locked: bool                   # Has lock for speaking turn
+    joined_at: Optional[datetime]     # Join timestamp
+    left_at: Optional[datetime]       # Leave timestamp
+```
+
+### Message Model
+
+```python
+from agent_messaging import Message, MessageType
+
+class Message(Generic[T]):
+    id: UUID                          # Message UUID
+    sender_id: UUID                   # Sender agent UUID
+    recipient_id: Optional[UUID]      # Recipient agent UUID (one-way/conversation)
+    session_id: Optional[UUID]        # Session UUID (conversations)
+    meeting_id: Optional[UUID]        # Meeting UUID (meetings)
+    message_type: MessageType         # Message type enum
+    content: T                        # User-defined payload
+    read_at: Optional[datetime]       # When message was read
+    created_at: datetime              # Creation timestamp
+    metadata: Optional[Dict]          # Optional custom metadata
+```
+
+### Message Type Enum
+
+```python
+from agent_messaging import MessageType
+
+class MessageType(str, Enum):
+    USER_DEFINED = "user_defined"    # Application message
+    SYSTEM = "system"                # System message
+    TIMEOUT = "timeout"              # Timeout notification
+    ENDING = "ending"                # Session/meeting ending
+```
+
+### Meeting Event Models
+
+```python
+from agent_messaging import MeetingEventType, MeetingEventPayload
+
 class MeetingEventType(str, Enum):
     MEETING_STARTED = "meeting_started"
     MEETING_ENDED = "meeting_ended"
@@ -1282,43 +1091,92 @@ class MeetingEventType(str, Enum):
     PARTICIPANT_LEFT = "participant_left"
     TIMEOUT_OCCURRED = "timeout_occurred"
 
-class MeetingEventPayload(BaseModel):
+class MeetingEventPayload:
     meeting_id: UUID
     event_type: MeetingEventType
     timestamp: datetime
-    data: Dict[str, Any]
+    data: Dict[str, Any]             # Event-specific data
 ```
 
-### Enums
+---
+
+## Exceptions
+
+### Exception Hierarchy
+
+All exceptions inherit from `AgentMessagingError`.
+
+```
+AgentMessagingError (base)
+├── AgentNotFoundError
+├── OrganizationNotFoundError
+├── SessionError
+│   ├── SessionStateError
+│   └── SessionLockError
+├── MeetingError
+│   ├── MeetingNotFoundError
+│   ├── MeetingNotActiveError
+│   ├── MeetingStateError
+│   ├── NotYourTurnError
+│   └── MeetingPermissionError
+├── HandlerError
+│   ├── NoHandlerRegisteredError
+│   └── HandlerTimeoutError
+├── TimeoutError
+└── DatabaseError
+```
+
+### Exception Classes
 
 ```python
-class MessageType(str, Enum):
-    USER_DEFINED = "user_defined"
-    SYSTEM = "system"
-    TIMEOUT = "timeout"
-    ENDING = "ending"
+from agent_messaging import (
+    AgentMessagingError,
+    AgentNotFoundError,
+    OrganizationNotFoundError,
+    SessionError,
+    SessionStateError,
+    SessionLockError,
+    MeetingError,
+    MeetingNotFoundError,
+    MeetingNotActiveError,
+    MeetingStateError,
+    NotYourTurnError,
+    MeetingPermissionError,
+    NoHandlerRegisteredError,
+    HandlerTimeoutError,
+    TimeoutError,
+    DatabaseError
+)
 
-class SessionType(str, Enum):
-    SYNC = "sync"
-    ASYNC = "async"
+# Raised when agent doesn't exist
+raise AgentNotFoundError("Agent 'alice' not found")
 
-class SessionStatus(str, Enum):
-    ACTIVE = "active"
-    WAITING = "waiting"
-    ENDED = "ended"
+# Raised when organization doesn't exist
+raise OrganizationNotFoundError("Organization 'org_001' not found")
 
-class MeetingStatus(str, Enum):
-    CREATED = "created"
-    READY = "ready"
-    ACTIVE = "active"
-    ENDED = "ended"
+# Raised when session in invalid state
+raise SessionStateError("Session already ended")
 
-class ParticipantStatus(str, Enum):
-    INVITED = "invited"
-    ATTENDING = "attending"
-    WAITING = "waiting"
-    SPEAKING = "speaking"
-    LEFT = "left"
+# Raised when lock acquisition fails
+raise SessionLockError("Failed to acquire session lock")
+
+# Raised when no handler registered
+raise NoHandlerRegisteredError("No handler for one-way messages")
+
+# Raised when handler exceeds timeout
+raise HandlerTimeoutError("Handler timed out after 30s")
+
+# Raised when operation exceeds timeout
+raise TimeoutError("Response not received within 30s")
+
+# Raised for database errors
+raise DatabaseError("Connection pool exhausted")
+
+# Meeting-specific exceptions
+raise MeetingNotFoundError("Meeting not found")
+raise MeetingNotActiveError("Meeting is not active")
+raise NotYourTurnError("It's not your turn to speak")
+raise MeetingPermissionError("Only organizer can start meeting")
 ```
 
 ---
@@ -1328,14 +1186,29 @@ class ParticipantStatus(str, Enum):
 ### Config Class
 
 ```python
-class Config(BaseSettings):
-    database: DatabaseConfig
-    messaging: MessagingConfig
-    debug: bool = False
-    log_level: str = "INFO"
+from agent_messaging import Config, DatabaseConfig, MessagingConfig
 
-    class Config:
-        env_file = ".env"
+# Create configuration programmatically
+config = Config(
+    database=DatabaseConfig(
+        host="localhost",
+        port=5432,
+        user="postgres",
+        password="postgres",
+        database="agent_messaging",
+        max_pool_size=20
+    ),
+    messaging=MessagingConfig(
+        default_sync_timeout=30.0,
+        default_meeting_turn_duration=60.0,
+        handler_timeout=30.0
+    ),
+    debug=False,
+    log_level="INFO"
+)
+
+# Or load from environment variables
+config = Config()  # Loads POSTGRES_*, HANDLER_*, etc.
 ```
 
 ### DatabaseConfig
@@ -1350,10 +1223,11 @@ class DatabaseConfig(BaseModel):
     max_pool_size: int = 20
     min_pool_size: int = 5
     connect_timeout_sec: int = 10
-
+    
     @property
     def dsn(self) -> str:
-        return f"postgres://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+        """PostgreSQL DSN string for connection."""
+        return f"postgres://{user}:{password}@{host}:{port}/{database}"
 ```
 
 ### MessagingConfig
@@ -1365,33 +1239,302 @@ class MessagingConfig(BaseModel):
     handler_timeout: float = 30.0
 ```
 
----
+### Environment Variables
 
-## Type Signatures
+```bash
+# Database Configuration
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DATABASE=agent_messaging
+POSTGRES_MAX_POOL_SIZE=20
+POSTGRES_MIN_POOL_SIZE=5
+POSTGRES_CONNECT_TIMEOUT_SEC=10
 
-For type checking and IDE support:
+# Messaging Timeouts
+DEFAULT_SYNC_TIMEOUT=30.0
+DEFAULT_MEETING_TURN_DURATION=60.0
+HANDLER_TIMEOUT=30.0
 
-```python
-from typing import TypeVar
-T = TypeVar('T')  # User message type
-
-# SDK instances
-sdk: AgentMessaging[MyMessage]
-
-# Messenger instances
-one_way: OneWayMessenger[MyMessage]
-sync_conv: SyncConversation[MyMessage]
-async_conv: AsyncConversation[MyMessage]
-meeting_mgr: MeetingManager[MyMessage]
-
-# Handler functions
-async def message_handler(message: MyMessage, context: MessageContext) -> Optional[MyMessage]:
-    pass
-
-async def event_handler(event: MeetingEventPayload) -> None:
-    pass
+# Logging
+DEBUG=false
+LOG_LEVEL=INFO
 ```
 
 ---
 
-*This API reference covers all public interfaces. For implementation details, see the source code.*
+## Examples
+
+### Example 1: One-Way Notifications
+
+```python
+import asyncio
+from agent_messaging import (
+    AgentMessaging,
+    register_one_way_handler,
+    MessageContext
+)
+
+@register_one_way_handler
+async def handle_notification(message: dict, context: MessageContext) -> None:
+    print(f"{context.sender_id} → {context.receiver_id}: {message['text']}")
+
+async def main():
+    async with AgentMessaging[dict, dict, dict]() as sdk:
+        # Setup
+        await sdk.register_organization("acme", "Acme Corp")
+        await sdk.register_agent("alice", "acme", "Alice")
+        await sdk.register_agent("bob", "acme", "Bob")
+        
+        # Send notification
+        await sdk.one_way.send(
+            "alice",
+            ["bob"],
+            {"text": "System maintenance at 3 PM"}
+        )
+
+asyncio.run(main())
+```
+
+### Example 2: Synchronous Conversations
+
+```python
+import asyncio
+from agent_messaging import (
+    AgentMessaging,
+    register_conversation_handler,
+    MessageContext
+)
+
+@register_conversation_handler
+async def handle_query(message: dict, context: MessageContext) -> dict:
+    return {
+        "answer": f"Answer to: {message['question']}"
+    }
+
+async def main():
+    async with AgentMessaging[dict, dict, dict]() as sdk:
+        # Setup
+        await sdk.register_organization("acme", "Acme Corp")
+        await sdk.register_agent("alice", "acme", "Alice")
+        await sdk.register_agent("support", "acme", "Support Agent")
+        
+        # Send request and wait for response
+        response = await sdk.conversation.send_and_wait(
+            "alice",
+            "support",
+            {"question": "How do I reset my password?"},
+            timeout=60.0
+        )
+        print(f"Response: {response['answer']}")
+
+asyncio.run(main())
+```
+
+### Example 3: Multi-Agent Meetings
+
+```python
+import asyncio
+from agent_messaging import (
+    AgentMessaging,
+    register_meeting_handler,
+    MessageContext,
+    MeetingEventType
+)
+
+@register_meeting_handler
+async def handle_meeting_turn(message: dict, context: MessageContext) -> dict:
+    return {"contribution": f"My thoughts on {message['topic']}..."}
+
+async def main():
+    async with AgentMessaging[dict, dict, dict]() as sdk:
+        # Setup
+        await sdk.register_organization("acme", "Acme Corp")
+        await sdk.register_agent("alice", "acme", "Alice")
+        await sdk.register_agent("bob", "acme", "Bob")
+        await sdk.register_agent("charlie", "acme", "Charlie")
+        
+        # Create and start meeting
+        meeting_id = await sdk.meeting.create_meeting(
+            "alice",
+            ["bob", "charlie"],
+            turn_duration=30.0
+        )
+        
+        await sdk.meeting.attend_meeting("bob", meeting_id)
+        await sdk.meeting.attend_meeting("charlie", meeting_id)
+        await sdk.meeting.start_meeting("alice", meeting_id)
+        
+        # Speak
+        await sdk.meeting.speak("alice", meeting_id, {"topic": "Q4 Planning"})
+        # ... bob and charlie speak in their turns
+        
+        # End meeting
+        await sdk.meeting.end_meeting("alice", meeting_id)
+
+asyncio.run(main())
+```
+
+---
+
+## Best Practices
+
+### 1. Always use async context manager
+
+```python
+# ✅ Good
+async with AgentMessaging[dict, dict, dict]() as sdk:
+    await sdk.register_organization("org", "Org")
+
+# ❌ Bad - resources not cleaned up
+sdk = AgentMessaging[dict, dict, dict]()
+# ... use sdk
+```
+
+### 2. Register handlers before creating SDK
+
+```python
+# ✅ Good
+@register_one_way_handler
+async def my_handler(msg, ctx):
+    pass
+
+async with AgentMessaging[dict, dict, dict]() as sdk:
+    await sdk.one_way.send(...)
+```
+
+### 3. Use timeout values for conversation waits
+
+```python
+# ✅ Good - timeout specified
+try:
+    response = await sdk.conversation.send_and_wait(
+        "alice", "bob",
+        message,
+        timeout=30.0  # Explicit timeout
+    )
+except TimeoutError:
+    print("No response received")
+
+# ⚠️ Caution - long timeout
+response = await sdk.conversation.send_and_wait(
+    "alice", "bob",
+    message,
+    timeout=300.0  # 5 minute wait!
+)
+```
+
+### 4. Handle exceptions appropriately
+
+```python
+from agent_messaging import (
+    AgentNotFoundError,
+    NoHandlerRegisteredError,
+    TimeoutError
+)
+
+try:
+    await sdk.one_way.send("alice", ["bob"], message)
+except AgentNotFoundError:
+    print("One of the agents doesn't exist")
+except NoHandlerRegisteredError:
+    print("No handler registered for this message type")
+except Exception as e:
+    print(f"Unexpected error: {e}")
+```
+
+### 5. Use metadata for tracking
+
+```python
+# Store request ID for correlation
+import uuid
+request_id = str(uuid.uuid4())
+
+await sdk.one_way.send(
+    "alice",
+    ["bob"],
+    message,
+    metadata={"request_id": request_id, "priority": "high"}
+)
+
+# Later search and filter by metadata
+results = await sdk.search_messages(
+    "query_text",
+    metadata_filter={"priority": "high"}
+)
+```
+
+### 6. Validate agent existence before operations
+
+```python
+try:
+    agent = await sdk.get_agent("alice")
+except AgentNotFoundError:
+    print("Agent not registered yet")
+    agent_id = await sdk.register_agent("alice", "org_id", "Alice")
+```
+
+### 7. Use conversation sessions for related messages
+
+```python
+# For multiple back-and-forth messages, use same session
+session = await sdk.conversation.send_and_wait(...)
+# Both messages are part of same session automatically
+```
+
+### 8. Monitor meeting events
+
+```python
+@sdk.register_event_handler(MeetingEventType.TURN_CHANGED)
+async def on_turn_changed(event):
+    print(f"Turn changed: {event.data['current_speaker_id']}")
+
+@sdk.register_event_handler(MeetingEventType.TIMEOUT_OCCURRED)
+async def on_timeout(event):
+    print(f"Agent timed out: {event.data['timed_out_agent_id']}")
+```
+
+---
+
+## Changelog
+
+### v0.3.0 (Current - December 2025)
+
+**Features:**
+- ✅ Four communication patterns (one-way, sync conversation, async conversation, meetings)
+- ✅ Multi-agent turn-based meeting coordination
+- ✅ PostgreSQL-backed persistence with psqlpy
+- ✅ Handler registration system with global handlers
+- ✅ Event system for meeting lifecycle
+- ✅ Message metadata and filtering
+- ✅ Full-text search with PostgreSQL
+- ✅ Advanced analytics (participation, timeline, turn statistics)
+- ✅ Comprehensive error handling
+- ✅ Async-first architecture
+
+**Improvements:**
+- Phase 11: Unified Conversation class (sync and async)
+- Phase 10: Major refactoring and optimization
+- Phase 5-7: Core features and resilience
+- Phase 4: Advanced features (metadata, filtering, search)
+
+### v0.1.0-0.2.0
+
+Foundation phases with core architecture and messaging patterns.
+
+---
+
+## Support and Documentation
+
+- **README**: See `README.md` for quick start
+- **Quick Start**: See `docs/quick-start.md` for tutorials
+- **Examples**: See `examples/` for working examples
+- **Testing**: See `tests/` for comprehensive test coverage
+- **GitHub**: Report issues at https://github.com/Ganzzi/agent_messaging
+
+---
+
+**Last Updated:** December 16, 2025  
+**Status:** Production Ready  
+**Version:** v0.3.0

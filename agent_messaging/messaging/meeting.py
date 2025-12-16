@@ -1,10 +1,7 @@
 """Multi-agent meeting implementation with turn-based coordination."""
 
-import asyncio
-import json
 import logging
-from datetime import datetime
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional
 from uuid import UUID
 
 from ..database.repositories.agent import AgentRepository
@@ -19,24 +16,21 @@ from ..exceptions import (
     NotYourTurnError,
 )
 from ..handlers.events import MeetingEventHandler
+from ..handlers.types import T_Meeting
 from ..utils.locks import SessionLock
 from ..utils.timeouts import MeetingTimeoutManager
 from ..models import (
-    CreateMeetingRequest,
     Meeting,
     MeetingParticipant,
     MeetingStatus,
     MessageType,
     ParticipantStatus,
 )
-from ..utils.locks import SessionLock
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
 
-
-class MeetingManager(Generic[T]):
+class MeetingManager(Generic[T_Meeting]):
     """Multi-agent meeting manager with turn-based coordination.
 
     Enables multiple agents to participate in structured meetings with
@@ -68,7 +62,10 @@ class MeetingManager(Generic[T]):
         # Initialize event handler
         self._event_handler = event_handler or MeetingEventHandler()
 
-    def _serialize_content(self, message: T) -> Dict[str, Any]:
+        # Track active meetings and their locks
+        self._meeting_locks: Dict[UUID, SessionLock] = {}
+
+    def _serialize_content(self, message: T_Meeting) -> Dict[str, Any]:
         """Serialize message content to dict for JSONB storage.
 
         Args:
@@ -88,9 +85,6 @@ class MeetingManager(Generic[T]):
             except (TypeError, ValueError):
                 # Wrap in dict if not convertible
                 return {"data": message}
-
-        # Track active meetings and their locks
-        self._meeting_locks: Dict[UUID, SessionLock] = {}
 
     async def create_meeting(
         self,
@@ -198,6 +192,8 @@ class MeetingManager(Generic[T]):
             raise ValueError("meeting_id must be a valid UUID")
 
         return await self._meeting_repo.get_by_id(meeting_id)
+
+    async def get_participants(self, meeting_id: UUID) -> List[MeetingParticipant]:
         """Get all participants for a meeting.
 
         Args:
@@ -263,7 +259,7 @@ class MeetingManager(Generic[T]):
             ValueError: If parameters are invalid
             AgentNotFoundError: If agent not found
             MeetingError: If meeting not found or agent not invited
-            MeetingStateError: If meeting is in invalid state for attendance
+            MeetingStateError: If meeting is in an invalid state for attendance
         """
         # Input validation
         if not agent_external_id or not isinstance(agent_external_id, str):
@@ -433,7 +429,7 @@ class MeetingManager(Generic[T]):
         self,
         agent_external_id: str,
         meeting_id: UUID,
-        message: T,
+        message: T_Meeting,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> UUID:
         """Speak in a meeting (requires having the turn).
@@ -441,7 +437,7 @@ class MeetingManager(Generic[T]):
         Args:
             agent_external_id: External ID of the speaking agent
             meeting_id: Meeting UUID
-            message: Message content to speak
+            message: Message content to speak (T_Meeting type)
             metadata: Optional custom metadata to attach (for tracking, filtering, etc.)
 
         Returns:
@@ -1101,47 +1097,3 @@ class MeetingManager(Generic[T]):
         stats = await self._meeting_repo.get_turn_statistics(meeting_uuid)
 
         return stats
-
-        """Get meeting message history.
-
-        Args:
-            meeting_id: Meeting UUID
-
-        Returns:
-            List of messages in chronological order
-
-        Raises:
-            ValueError: If meeting_id is invalid
-        """
-        # Input validation
-        if not isinstance(meeting_id, UUID):
-            raise ValueError("meeting_id must be a valid UUID")
-
-        # Get all messages for this meeting
-        # Note: This is a simplified implementation. In a real system,
-        # you'd want to add a method to MessageRepository to get messages by meeting_id
-        # For now, we'll use a direct query
-
-        query = """
-            SELECT id, sender_id, message_type, content, created_at, metadata
-            FROM messages
-            WHERE meeting_id = $1
-            ORDER BY created_at ASC
-        """
-        results = await self._message_repo._execute(query, [str(meeting_id)])
-        rows = results.result()
-
-        messages = []
-        for row in rows:
-            messages.append(
-                {
-                    "id": str(row["id"]),
-                    "sender_id": str(row["sender_id"]) if row["sender_id"] else None,
-                    "message_type": row["message_type"],
-                    "content": row["content"],
-                    "created_at": row["created_at"].isoformat(),
-                    "metadata": row["metadata"],
-                }
-            )
-
-        return messages

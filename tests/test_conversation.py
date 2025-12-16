@@ -10,19 +10,36 @@ from agent_messaging.models import (
     Agent,
     Message,
     MessageType,
+    Organization,
     Session,
     SessionStatus,
 )
 from agent_messaging.exceptions import AgentNotFoundError, TimeoutError
+from agent_messaging.handlers import register_conversation_handler, clear_handlers
+
+
+@pytest.fixture(autouse=True)
+def clean_handlers_fixture():
+    """Clean handlers before and after each test."""
+    clear_handlers()
+    yield
+    clear_handlers()
 
 
 @pytest.fixture
-def mock_handler_registry():
-    """Mock handler registry for testing."""
-    registry = MagicMock()
-    registry.has_handler.return_value = True
-    registry.invoke_handler_async.return_value = MagicMock()
-    return registry
+def mock_invoke_handler_async():
+    """Mock for the global invoke_handler_async function."""
+    with patch("agent_messaging.messaging.conversation.invoke_handler_async") as mock:
+        mock.return_value = None
+        yield mock
+
+
+@pytest.fixture
+def mock_has_handler():
+    """Mock for the global has_handler function."""
+    with patch("agent_messaging.messaging.conversation.has_handler") as mock:
+        mock.return_value = True
+        yield mock
 
 
 @pytest.fixture
@@ -42,6 +59,15 @@ def mock_agent_repo():
     repo = MagicMock()
     repo.get_by_external_id = AsyncMock(return_value=None)
     repo.get_by_id = AsyncMock(return_value=None)
+    repo.get_organization = AsyncMock(
+        return_value=Organization(
+            id=uuid4(),
+            external_id="test_org",
+            name="Test Org",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+    )
     return repo
 
 
@@ -58,10 +84,9 @@ def mock_session_repo():
 
 
 @pytest.fixture
-def conversation(mock_handler_registry, mock_message_repo, mock_session_repo, mock_agent_repo):
+def conversation(mock_message_repo, mock_session_repo, mock_agent_repo):
     """Conversation instance for testing."""
     return Conversation(
-        handler_registry=mock_handler_registry,
         message_repo=mock_message_repo,
         session_repo=mock_session_repo,
         agent_repo=mock_agent_repo,
@@ -78,9 +103,15 @@ class TestConversation:
         mock_agent_repo,
         mock_session_repo,
         mock_message_repo,
-        mock_handler_registry,
+        mock_invoke_handler_async,
     ):
         """Test successful send_and_wait conversation."""
+
+        # Register a handler so has_handler() returns True
+        @register_conversation_handler
+        async def test_handler(message, context):
+            pass
+
         # Setup mock agents
         sender = Agent(
             id=uuid4(),
@@ -177,7 +208,7 @@ class TestConversation:
         mock_message_repo.create.assert_called_once()
 
         # Verify handler was invoked
-        mock_handler_registry.invoke_handler_async.assert_called_once()
+        mock_invoke_handler_async.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_send_and_wait_timeout(
@@ -186,9 +217,15 @@ class TestConversation:
         mock_agent_repo,
         mock_session_repo,
         mock_message_repo,
-        mock_handler_registry,
+        mock_invoke_handler_async,
     ):
         """Test send_and_wait with timeout."""
+
+        # Register a handler so has_handler() returns True
+        @register_conversation_handler
+        async def test_handler(message, context):
+            pass
+
         # Setup mock agents
         sender = Agent(
             id=uuid4(),
@@ -251,9 +288,14 @@ class TestConversation:
         mock_agent_repo,
         mock_session_repo,
         mock_message_repo,
-        mock_handler_registry,
     ):
         """Test successful conversation ending."""
+
+        # Register a handler so has_handler() returns True
+        @register_conversation_handler
+        async def test_handler(message, context):
+            pass
+
         # Setup mock agents
         agent1 = Agent(
             id=uuid4(),
@@ -288,7 +330,6 @@ class TestConversation:
         mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[agent1, agent2])
         mock_session_repo.get_active_session = AsyncMock(return_value=session)
         mock_session_repo.end_session = AsyncMock()
-        mock_handler_registry.has_handler = MagicMock(return_value=True)
         mock_message_repo.create = AsyncMock(return_value=uuid4())
 
         # End conversation
@@ -329,9 +370,15 @@ class TestConversation:
         mock_agent_repo,
         mock_session_repo,
         mock_message_repo,
-        mock_handler_registry,
+        mock_invoke_handler_async,
     ):
         """Test successful send_no_wait (async messaging)."""
+
+        # Register a handler so has_handler() returns True
+        @register_conversation_handler
+        async def test_handler(message, context):
+            pass
+
         # Setup mock agents
         sender = Agent(
             id=uuid4(),
@@ -385,7 +432,7 @@ class TestConversation:
         assert call_args[1]["message_type"] == MessageType.USER_DEFINED
 
         # Verify handler was invoked
-        mock_handler_registry.invoke_handler_async.assert_called_once()
+        mock_invoke_handler_async.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_send_no_wait_sender_not_found(self, conversation, mock_agent_repo):

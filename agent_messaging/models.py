@@ -163,22 +163,6 @@ class MeetingEvent(BaseModel):
 
 
 # ============================================================================
-# API Context Models
-# ============================================================================
-
-
-class MessageContext(BaseModel):
-    """Context provided to message handlers."""
-
-    sender_id: str
-    recipient_id: str
-    message_id: UUID
-    timestamp: datetime
-    session_id: Optional[UUID] = None
-    meeting_id: Optional[UUID] = None
-
-
-# ============================================================================
 # Meeting Event Data Models (Type-Safe)
 # ============================================================================
 

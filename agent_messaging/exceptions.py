@@ -28,12 +28,6 @@ class SessionError(AgentMessagingError):
     pass
 
 
-class SessionNotFoundError(SessionError):
-    """Raised when a conversation session cannot be found."""
-
-    pass
-
-
 class SessionStateError(SessionError):
     """Raised when a session is in an invalid state for the requested operation."""
 
@@ -96,12 +90,6 @@ class NoHandlerRegisteredError(HandlerError):
     pass
 
 
-class HandlerExecutionError(HandlerError):
-    """Raised when a message handler fails during execution."""
-
-    pass
-
-
 class HandlerTimeoutError(HandlerError):
     """Raised when a message handler times out."""
 
@@ -110,25 +98,7 @@ class HandlerTimeoutError(HandlerError):
 
 # Timeout-related errors
 class TimeoutError(AgentMessagingError):
-    """Base class for timeout-related errors."""
-
-    pass
-
-
-class ConversationTimeoutError(TimeoutError):
-    """Raised when a conversation operation times out."""
-
-    pass
-
-
-class MeetingTimeoutError(TimeoutError):
-    """Raised when a meeting operation times out."""
-
-    pass
-
-
-class TurnTimeoutError(MeetingTimeoutError):
-    """Raised when a meeting turn times out."""
+    """Raised when an operation times out."""
 
     pass
 
@@ -136,37 +106,5 @@ class TurnTimeoutError(MeetingTimeoutError):
 # Database and connection errors
 class DatabaseError(AgentMessagingError):
     """Raised when database operations fail."""
-
-    pass
-
-
-class ConnectionError(DatabaseError):
-    """Raised when database connection fails."""
-
-    pass
-
-
-class PoolExhaustionError(DatabaseError):
-    """Raised when connection pool is exhausted."""
-
-    pass
-
-
-# Lock-related errors
-class LockAcquisitionError(AgentMessagingError):
-    """Raised when unable to acquire a coordination lock."""
-
-    pass
-
-
-# Validation errors
-class MessageValidationError(AgentMessagingError):
-    """Raised when message validation fails."""
-
-    pass
-
-
-class ConfigurationError(AgentMessagingError):
-    """Raised when configuration is invalid or missing."""
 
     pass

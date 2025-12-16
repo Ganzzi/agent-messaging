@@ -1,21 +1,30 @@
 """Unit tests for OneWayMessenger."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 from agent_messaging.messaging.one_way import OneWayMessenger
-from agent_messaging.models import Agent, MessageType, MessageContext
+from agent_messaging.models import Agent, MessageType, Organization
+from agent_messaging.handlers.types import MessageContext
 from agent_messaging.exceptions import AgentNotFoundError, NoHandlerRegisteredError
+from agent_messaging.handlers import register_one_way_handler, clear_handlers
+
+
+@pytest.fixture(autouse=True)
+def clean_handlers_fixture():
+    """Clean handlers before and after each test."""
+    clear_handlers()
+    yield
+    clear_handlers()
 
 
 @pytest.fixture
-def mock_handler_registry():
-    """Mock handler registry for testing."""
-    registry = MagicMock()
-    registry.has_handler.return_value = True
-    registry.invoke_handler_async.return_value = MagicMock()
-    return registry
+def mock_invoke_handler_async():
+    """Mock for the global invoke_handler_async function."""
+    with patch("agent_messaging.messaging.one_way.invoke_handler_async") as mock:
+        mock.return_value = None
+        yield mock
 
 
 @pytest.fixture
@@ -35,14 +44,22 @@ def mock_agent_repo():
     repo = MagicMock()
     repo.get_by_external_id = AsyncMock(return_value=None)
     repo.get_by_id = AsyncMock(return_value=None)
+    repo.get_organization = AsyncMock(
+        return_value=Organization(
+            id=uuid4(),
+            external_id="test_org",
+            name="Test Org",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+    )
     return repo
 
 
 @pytest.fixture
-def one_way_messenger(mock_handler_registry, mock_message_repo, mock_agent_repo):
+def one_way_messenger(mock_message_repo, mock_agent_repo):
     """OneWayMessenger instance for testing."""
     return OneWayMessenger(
-        handler_registry=mock_handler_registry,
         message_repo=mock_message_repo,
         agent_repo=mock_agent_repo,
     )
@@ -53,9 +70,15 @@ class TestOneWayMessenger:
 
     @pytest.mark.asyncio
     async def test_send_success(
-        self, one_way_messenger, mock_agent_repo, mock_message_repo, mock_handler_registry
+        self, one_way_messenger, mock_agent_repo, mock_message_repo, mock_invoke_handler_async
     ):
         """Test successful one-way message sending."""
+
+        # Register a handler
+        @register_one_way_handler
+        async def test_handler(message, context):
+            pass
+
         # Setup mock agents
         sender = Agent(
             id=uuid4(),
@@ -92,10 +115,10 @@ class TestOneWayMessenger:
         )
 
         # Verify handler was invoked
-        mock_handler_registry.invoke_handler_async.assert_called_once()
-        call_args = mock_handler_registry.invoke_handler_async.call_args
-        assert call_args[0][0] == {"text": "Hello!"}  # message
-        assert isinstance(call_args[0][1], MessageContext)  # context
+        mock_invoke_handler_async.assert_called_once()
+        call_args = mock_invoke_handler_async.call_args
+        assert call_args[0][0] == {"text": "Hello!"}  # message (positional arg 0)
+        assert isinstance(call_args[0][1], MessageContext)  # context (positional arg 1)
 
     @pytest.mark.asyncio
     async def test_send_sender_not_found(self, one_way_messenger, mock_agent_repo):
@@ -123,8 +146,8 @@ class TestOneWayMessenger:
             await one_way_messenger.send("alice", ["bob"], {"text": "Hello!"})
 
     @pytest.mark.asyncio
-    async def test_send_no_handler(self, one_way_messenger, mock_agent_repo, mock_handler_registry):
-        """Test sending message when recipient has no handler."""
+    async def test_send_no_handler(self, one_way_messenger, mock_agent_repo):
+        """Test sending message when no handler is registered."""
         sender = Agent(
             id=uuid4(),
             external_id="alice",
@@ -143,9 +166,9 @@ class TestOneWayMessenger:
         )
 
         mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[sender, recipient])
-        mock_handler_registry.has_handler.return_value = False
 
-        with pytest.raises(NoHandlerRegisteredError, match="No handler registered"):
+        # Don't register any handler - ensure handlers are cleared
+        with pytest.raises(NoHandlerRegisteredError, match="No one-way handler registered"):
             await one_way_messenger.send("alice", ["bob"], {"text": "Hello!"})
 
     def test_serialize_content_dict(self, one_way_messenger):

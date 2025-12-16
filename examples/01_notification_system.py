@@ -4,11 +4,17 @@ Example 1: Simple Notification System
 
 This example demonstrates one-way messaging for notifications.
 Agents send notifications to each other without expecting responses.
+
+Handlers are registered globally and process messages for ALL agents.
 """
 
 import asyncio
 import logging
-from agent_messaging import AgentMessaging
+from agent_messaging import (
+    AgentMessaging,
+    register_one_way_handler,
+    MessageContext,
+)
 from pydantic import BaseModel
 
 # Configure logging
@@ -24,11 +30,25 @@ class Notification(BaseModel):
     priority: str = "normal"  # "low", "normal", "high", "urgent"
 
 
+# Register global handler - processes ALL one-way messages for ALL agents
+@register_one_way_handler
+async def handle_notification(notification: Notification, context: MessageContext) -> None:
+    """Global handler for all notification messages."""
+    logger.info(
+        f"[{context.receiver_id}] Received from {context.sender_id}: "
+        f"{notification.title} - {notification.message}"
+    )
+    if notification.priority == "urgent":
+        logger.warning(f"[{context.receiver_id}] URGENT: Immediate attention required!")
+
+
 async def main():
     """Run the notification system example."""
     logger.info("Starting notification system example")
 
-    async with AgentMessaging[Notification]() as sdk:
+    # Use 3 type parameters: T_OneWay, T_Conversation, T_Meeting
+    # Here we only use one-way messaging, so other types can be 'dict'
+    async with AgentMessaging[Notification, dict, dict]() as sdk:
         # Register organization
         await sdk.register_organization("company", "Tech Company")
 
@@ -37,24 +57,13 @@ async def main():
         await sdk.register_agent("admin", "company", "Administrator")
         await sdk.register_agent("developer", "company", "Developer")
 
-        # Register one-way handlers for each agent
-        @sdk.register_one_way_handler("admin")
-        async def admin_handler(notification: Notification, context):
-            logger.info(f"ADMIN ALERT: {notification.title} - {notification.message}")
-            if notification.priority == "urgent":
-                logger.warning("URGENT: Immediate attention required!")
-
-        @sdk.register_one_way_handler("developer")
-        async def dev_handler(notification: Notification, context):
-            logger.info(f"DEV NOTIFICATION: {notification.title} - {notification.message}")
-
         # Send various notifications
         logger.info("Sending notifications...")
 
         # System alerts
         await sdk.one_way.send(
             "system_monitor",
-            "admin",
+            ["admin"],
             Notification(
                 title="Server Down", message="Production server is unresponsive", priority="urgent"
             ),
@@ -62,7 +71,7 @@ async def main():
 
         await sdk.one_way.send(
             "system_monitor",
-            "developer",
+            ["developer"],
             Notification(
                 title="Build Failed",
                 message="CI/CD pipeline failed on main branch",
@@ -73,7 +82,7 @@ async def main():
         # Regular notifications
         await sdk.one_way.send(
             "system_monitor",
-            "admin",
+            ["admin"],
             Notification(
                 title="Daily Backup", message="Daily backup completed successfully", priority="low"
             ),

@@ -1,24 +1,24 @@
 """One-way messaging implementation (one-to-many)."""
 
-import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, Generic, List, Optional, TypeVar
-from uuid import UUID
+from typing import Any, Dict, Generic, List, Optional
 
 from ..database.repositories.agent import AgentRepository
 from ..database.repositories.message import MessageRepository
 from ..exceptions import AgentNotFoundError, NoHandlerRegisteredError
-from ..handlers.registry import HandlerRegistry
-from ..handlers.types import HandlerContext
-from ..models import MessageContext, MessageType
+from ..handlers.registry import (
+    get_handler,
+    has_handler,
+    invoke_handler_async,
+)
+from ..handlers.types import HandlerContext, MessageContext, T_OneWay
+from ..models import MessageType
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
 
-
-class OneWayMessenger(Generic[T]):
+class OneWayMessenger(Generic[T_OneWay]):
     """One-to-many message delivery.
 
     Sends messages from one sender to multiple recipients.
@@ -28,22 +28,19 @@ class OneWayMessenger(Generic[T]):
 
     def __init__(
         self,
-        handler_registry: HandlerRegistry,
         message_repo: MessageRepository,
         agent_repo: AgentRepository,
     ):
         """Initialize the OneWayMessenger.
 
         Args:
-            handler_registry: Registry for message handlers
             message_repo: Repository for message operations
             agent_repo: Repository for agent operations
         """
-        self._handler_registry = handler_registry
         self._message_repo = message_repo
         self._agent_repo = agent_repo
 
-    def _serialize_content(self, message: T) -> Dict[str, Any]:
+    def _serialize_content(self, message: T_OneWay) -> Dict[str, Any]:
         """Serialize message content to dict for JSONB storage.
 
         Args:
@@ -68,7 +65,7 @@ class OneWayMessenger(Generic[T]):
         self,
         sender_external_id: str,
         recipient_external_ids: List[str],
-        message: T,
+        message: T_OneWay,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         """Send a one-way message to multiple recipients.
@@ -79,7 +76,7 @@ class OneWayMessenger(Generic[T]):
         Args:
             sender_external_id: External ID of sender agent
             recipient_external_ids: List of recipient external IDs
-            message: Message to send to all recipients
+            message: Message to send to all recipients (T_OneWay type)
             metadata: Optional custom metadata to attach (for tracking, filtering, etc.)
 
         Returns:
@@ -94,7 +91,7 @@ class OneWayMessenger(Generic[T]):
             message_ids = await sdk.one_way.send(
                 "notification_service",
                 ["alice", "bob", "charlie"],
-                {"type": "system_update", "message": "Server maintenance at 3 AM"},
+                Notification(type="system_update", text="Server maintenance at 3 AM"),
                 metadata={"priority": "high", "request_id": "req-123"}
             )
         """
@@ -134,11 +131,15 @@ class OneWayMessenger(Generic[T]):
             recipients.append((recipient_id, recipient))
 
         # Check handler is registered
-        if not self._handler_registry.has_handler():
-            raise NoHandlerRegisteredError("No handler registered")
+        if not has_handler(HandlerContext.ONE_WAY):
+            raise NoHandlerRegisteredError("No one-way handler registered")
 
         # Serialize message content once
         content_dict = self._serialize_content(message)
+
+        # Get organization from sender for context
+        sender_org = await self._agent_repo.get_organization(sender.id)
+        org_external_id = sender_org.external_id if sender_org else "unknown"
 
         # Send to all recipients
         message_ids = []
@@ -155,18 +156,18 @@ class OneWayMessenger(Generic[T]):
             # Create message context
             context = MessageContext(
                 sender_id=sender_external_id,
-                recipient_id=recipient_external_id,
+                receiver_id=recipient_external_id,
+                organization_id=org_external_id,
+                handler_context=HandlerContext.ONE_WAY,
                 message_id=message_id,
-                timestamp=datetime.now(),
+                metadata=metadata or {},
             )
 
-            # Invoke handler asynchronously (fire-and-forget)
-            # Uses type-based routing: tries agent-specific handler first, falls back to global
-            self._handler_registry.invoke_handler_async(
+            # Invoke global handler asynchronously (fire-and-forget)
+            invoke_handler_async(
                 message,
                 context,
-                agent_external_id=recipient_external_id,
-                handler_context=HandlerContext.ONE_WAY,
+                HandlerContext.ONE_WAY,
             )
 
             message_ids.append(str(message_id))

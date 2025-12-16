@@ -1,10 +1,9 @@
 """Unified conversation implementation combining sync and async patterns."""
 
 import asyncio
-import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional
 from uuid import UUID
 
 from ..database.repositories.agent import AgentRepository
@@ -17,17 +16,19 @@ from ..exceptions import (
     SessionStateError,
     TimeoutError,
 )
-from ..handlers.registry import HandlerRegistry
-from ..handlers.types import HandlerContext
-from ..models import MessageContext, MessageType, SessionStatus
+from ..handlers.registry import (
+    has_handler,
+    invoke_handler,
+    invoke_handler_async,
+)
+from ..handlers.types import HandlerContext, MessageContext, T_Conversation
+from ..models import MessageType, SessionStatus
 from ..utils.locks import SessionLock
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
 
-
-class Conversation(Generic[T]):
+class Conversation(Generic[T_Conversation]):
     """Unified conversation class supporting both sync and async messaging patterns.
 
     This class combines the functionality of SyncConversation and AsyncConversation
@@ -43,7 +44,6 @@ class Conversation(Generic[T]):
 
     def __init__(
         self,
-        handler_registry: HandlerRegistry,
         message_repo: MessageRepository,
         session_repo: SessionRepository,
         agent_repo: AgentRepository,
@@ -51,21 +51,19 @@ class Conversation(Generic[T]):
         """Initialize the Conversation.
 
         Args:
-            handler_registry: Registry for message handlers
             message_repo: Repository for message operations
             session_repo: Repository for session operations
             agent_repo: Repository for agent operations
         """
-        self._handler_registry = handler_registry
         self._message_repo = message_repo
         self._session_repo = session_repo
         self._agent_repo = agent_repo
 
         # Track waiting events for responses (from sync pattern)
         self._waiting_events: Dict[UUID, asyncio.Event] = {}
-        self._waiting_responses: Dict[UUID, T] = {}
+        self._waiting_responses: Dict[UUID, T_Conversation] = {}
 
-    def _serialize_content(self, message: T) -> Dict[str, Any]:
+    def _serialize_content(self, message: T_Conversation) -> Dict[str, Any]:
         """Serialize message content to dict for JSONB storage.
 
         Args:
@@ -86,7 +84,7 @@ class Conversation(Generic[T]):
                 # Wrap in dict if not convertible
                 return {"data": message}
 
-    def _deserialize_content(self, content_dict: Dict[str, Any]) -> T:
+    def _deserialize_content(self, content_dict: Dict[str, Any]) -> T_Conversation:
         """Deserialize message content from dict.
 
         Args:
@@ -103,10 +101,10 @@ class Conversation(Generic[T]):
         self,
         sender_external_id: str,
         recipient_external_id: str,
-        message: T,
+        message: T_Conversation,
         timeout: float = 30.0,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> T:
+    ) -> T_Conversation:
         """Send a message and wait for response (blocking).
 
         Creates a session, acquires lock, sends message, waits for response.
@@ -115,12 +113,12 @@ class Conversation(Generic[T]):
         Args:
             sender_external_id: External ID of sender agent
             recipient_external_id: External ID of recipient agent
-            message: Message to send
+            message: Message to send (T_Conversation type)
             timeout: Maximum seconds to wait for response
             metadata: Optional custom metadata to attach (for tracking, filtering, etc.)
 
         Returns:
-            Response message from recipient
+            Response message from recipient (T_Conversation type)
 
         Raises:
             ValueError: If parameters are invalid
@@ -170,8 +168,8 @@ class Conversation(Generic[T]):
             raise AgentNotFoundError(f"Recipient agent not found: {recipient_external_id}")
 
         # Check handler is registered
-        if not self._handler_registry.has_handler():
-            raise NoHandlerRegisteredError("No handler registered")
+        if not has_handler(HandlerContext.CONVERSATION):
+            raise NoHandlerRegisteredError("No conversation handler registered")
 
         # Create or get active session
         session = await self._session_repo.get_active_session(sender.id, recipient.id)
@@ -226,25 +224,29 @@ class Conversation(Generic[T]):
                     metadata=metadata or {},
                 )
 
+                # Get organization for context
+                sender_org = await self._agent_repo.get_organization(sender.id)
+                org_external_id = sender_org.external_id if sender_org else "unknown"
+
                 # Create message context
                 context = MessageContext(
                     sender_id=sender_external_id,
-                    recipient_id=recipient_external_id,
+                    receiver_id=recipient_external_id,
+                    organization_id=org_external_id,
+                    handler_context=HandlerContext.CONVERSATION,
                     message_id=message_id,
-                    timestamp=datetime.now(),
-                    session_id=session.id,
+                    session_id=str(session.id),
+                    metadata=metadata or {},
                 )
 
                 # Invoke recipient handler and capture response
                 try:
                     # Try to get handler response with short timeout (non-blocking)
-                    # Uses type-based routing: tries agent-specific handler first
                     handler_response = await asyncio.wait_for(
-                        self._handler_registry.invoke_handler(
+                        invoke_handler(
                             message,
                             context,
-                            agent_external_id=recipient_external_id,
-                            handler_context=HandlerContext.CONVERSATION,
+                            HandlerContext.CONVERSATION,
                         ),
                         timeout=0.1,  # 100ms timeout for immediate responses
                     )
@@ -279,22 +281,20 @@ class Conversation(Generic[T]):
 
                 except asyncio.TimeoutError:
                     # Handler didn't respond immediately, invoke asynchronously
-                    self._handler_registry.invoke_handler_async(
+                    invoke_handler_async(
                         message,
                         context,
-                        agent_external_id=recipient_external_id,
-                        handler_context=HandlerContext.CONVERSATION,
+                        HandlerContext.CONVERSATION,
                     )
                     logger.debug(f"Handler invoked asynchronously for message {message_id}")
                 except Exception as e:
                     # Handler error - log and continue waiting for manual response
                     logger.error(f"Handler error for message {message_id}: {e}", exc_info=True)
                     # Still invoke async in case handler wants to retry
-                    self._handler_registry.invoke_handler_async(
+                    invoke_handler_async(
                         message,
                         context,
-                        agent_external_id=recipient_external_id,
-                        handler_context=HandlerContext.CONVERSATION,
+                        HandlerContext.CONVERSATION,
                     )
 
                 # Check for immediate response (handler might have sent a reply synchronously)
@@ -357,7 +357,7 @@ class Conversation(Generic[T]):
         self,
         sender_external_id: str,
         recipient_external_id: str,
-        message: T,
+        message: T_Conversation,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Send a message asynchronously (non-blocking).
@@ -432,22 +432,27 @@ class Conversation(Generic[T]):
             metadata=metadata or {},
         )
 
+        # Get organization for context
+        sender_org = await self._agent_repo.get_organization(sender.id)
+        org_external_id = sender_org.external_id if sender_org else "unknown"
+
         # Create message context
         context = MessageContext(
             sender_id=sender_external_id,
-            recipient_id=recipient_external_id,
+            receiver_id=recipient_external_id,
+            organization_id=org_external_id,
+            handler_context=HandlerContext.CONVERSATION,
             message_id=message_id,
-            timestamp=datetime.now(),
-            session_id=session.id,
+            session_id=str(session.id),
+            metadata=metadata or {},
         )
 
         # Invoke recipient handler asynchronously if registered
-        if self._handler_registry.has_handler():
-            self._handler_registry.invoke_handler_async(
+        if has_handler(HandlerContext.CONVERSATION):
+            invoke_handler_async(
                 message,
                 context,
-                agent_external_id=recipient_external_id,
-                handler_context=HandlerContext.CONVERSATION,
+                HandlerContext.CONVERSATION,
             )
 
         # Wake any waiting agent for this session
@@ -510,8 +515,12 @@ class Conversation(Generic[T]):
         # Send ending message to both agents if handler is registered
         ending_content = {"type": "conversation_ended", "reason": "explicit_end"}
 
+        # Get organization for context
+        sender_org = await self._agent_repo.get_organization(agent1.id)
+        org_external_id = sender_org.external_id if sender_org else "unknown"
+
         # Send to agent1 if handler is registered
-        if self._handler_registry.has_handler():
+        if has_handler(HandlerContext.CONVERSATION):
             message_id = await self._message_repo.create(
                 sender_id=agent1.id,
                 recipient_id=agent2.id,
@@ -521,21 +530,20 @@ class Conversation(Generic[T]):
             )
             context = MessageContext(
                 sender_id=other_agent_external_id,
-                recipient_id=agent_external_id,
-                message_id=message_id,
-                timestamp=datetime.now(),
-                session_id=session.id,
-            )
-            # Note: We send the ending message as a dict, not as generic T
-            self._handler_registry.invoke_handler_async(
-                ending_content,  # This might need adjustment based on handler expectations
-                context,
-                agent_external_id=agent_external_id,
+                receiver_id=agent_external_id,
+                organization_id=org_external_id,
                 handler_context=HandlerContext.CONVERSATION,
+                message_id=message_id,
+                session_id=str(session.id),
+            )
+            invoke_handler_async(
+                ending_content,
+                context,
+                HandlerContext.CONVERSATION,
             )
 
         # Send to agent2 if handler is registered
-        if self._handler_registry.has_handler():
+        if has_handler(HandlerContext.CONVERSATION):
             message_id = await self._message_repo.create(
                 sender_id=agent2.id,
                 recipient_id=agent1.id,
@@ -545,16 +553,16 @@ class Conversation(Generic[T]):
             )
             context = MessageContext(
                 sender_id=agent_external_id,
-                recipient_id=other_agent_external_id,
-                message_id=message_id,
-                timestamp=datetime.now(),
-                session_id=session.id,
-            )
-            self._handler_registry.invoke_handler_async(
-                ending_content,  # This might need adjustment based on handler expectations
-                context,
-                agent_external_id=other_agent_external_id,
+                receiver_id=other_agent_external_id,
+                organization_id=org_external_id,
                 handler_context=HandlerContext.CONVERSATION,
+                message_id=message_id,
+                session_id=str(session.id),
+            )
+            invoke_handler_async(
+                ending_content,
+                context,
+                HandlerContext.CONVERSATION,
             )
 
         logger.info(f"Conversation ended: {session.id}")
@@ -562,7 +570,7 @@ class Conversation(Generic[T]):
     async def get_unread_messages(
         self,
         agent_external_id: str,
-    ) -> List[T]:
+    ) -> List[T_Conversation]:
         """Get all unread messages for an agent.
 
         Messages are marked as read after retrieval.
@@ -618,7 +626,7 @@ class Conversation(Generic[T]):
         agent_a_external_id: str,
         agent_b_external_id: str,
         timeout: Optional[float] = None,
-    ) -> Optional[T]:
+    ) -> Optional[T_Conversation]:
         """Get response from agent_b, checking queue first then waiting if empty.
 
         This combines queue checking with waiting behavior. First checks for any
@@ -764,8 +772,8 @@ class Conversation(Generic[T]):
             raise AgentNotFoundError(f"Agent not found: {agent_external_id}")
 
         # Check handler is registered
-        if not self._handler_registry.has_handler():
-            raise NoHandlerRegisteredError(f"No handler registered for agent: {agent_external_id}")
+        if not has_handler(HandlerContext.CONVERSATION):
+            raise NoHandlerRegisteredError(f"No conversation handler registered")
 
         # Get any pending unread messages for this agent
         pending_messages = await self._message_repo.get_unread_messages(agent.id)
@@ -773,6 +781,10 @@ class Conversation(Generic[T]):
         if not pending_messages:
             logger.info(f"No pending messages for {agent_external_id}")
             return
+
+        # Get organization for context
+        agent_org = await self._agent_repo.get_organization(agent.id)
+        org_external_id = agent_org.external_id if agent_org else "unknown"
 
         # Process each pending message
         for message in pending_messages:
@@ -784,21 +796,21 @@ class Conversation(Generic[T]):
 
             context = MessageContext(
                 sender_id=sender.external_id,
-                recipient_id=agent_external_id,
+                receiver_id=agent_external_id,
+                organization_id=org_external_id,
+                handler_context=HandlerContext.CONVERSATION,
                 message_id=message.id,
-                timestamp=message.created_at,
-                session_id=message.session_id,
+                session_id=str(message.session_id) if message.session_id else None,
             )
 
             # Deserialize message content
             content = self._deserialize_content(message.content)
 
             # Invoke handler
-            self._handler_registry.invoke_handler_async(
+            invoke_handler_async(
                 content,
                 context,
-                agent_external_id=agent_external_id,
-                handler_context=HandlerContext.CONVERSATION,
+                HandlerContext.CONVERSATION,
             )
 
             # Mark message as read (processed)

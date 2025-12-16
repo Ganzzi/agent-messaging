@@ -1,21 +1,46 @@
-"""Handler type system for Phase 3 refactor.
+"""Handler type system for agent messaging.
 
-Implements type-safe handler protocols and routing for different messaging contexts.
+Defines type-safe handler protocols with three separate generic types:
+- T_OneWay: Type for fire-and-forget messages
+- T_Conversation: Type for request-response messages
+- T_Meeting: Type for meeting messages
+
+Handlers are global processors that apply to all agents across all organizations.
 """
 
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Optional, Protocol, runtime_checkable
-
-from ..models import MessageContext
+from typing import Any, Callable, Generic, Optional, Protocol, TypeVar
 
 __all__ = [
+    # Generic type variables
+    "T_OneWay",
+    "T_Conversation",
+    "T_Meeting",
+    # Context types
     "HandlerContext",
+    "MessageContext",
+    # Handler protocols
     "OneWayHandler",
     "ConversationHandler",
     "MeetingHandler",
     "SystemHandler",
-    "MessageContextEnhanced",
+    # Type aliases
+    "AnyHandler",
 ]
+
+# ============================================================================
+# Generic Type Variables
+# ============================================================================
+
+T_OneWay = TypeVar("T_OneWay")
+"""Type variable for one-way (fire-and-forget) message payloads."""
+
+T_Conversation = TypeVar("T_Conversation")
+"""Type variable for conversation (request-response) message payloads."""
+
+T_Meeting = TypeVar("T_Meeting")
+"""Type variable for meeting message payloads."""
 
 
 # ============================================================================
@@ -43,24 +68,42 @@ class HandlerContext(str, Enum):
 
 
 # ============================================================================
-# Enhanced MessageContext
+# MessageContext Dataclass
 # ============================================================================
 
 
-class MessageContextEnhanced(MessageContext):
-    """Enhanced message context with handler routing information.
+@dataclass
+class MessageContext:
+    """Context information passed to handlers with each message.
 
-    Extends base MessageContext with additional metadata for type-based routing.
+    Contains routing information and metadata about the message being processed.
+    Handlers receive this alongside the message payload to understand the
+    message source, destination, and any associated session/meeting context.
     """
+
+    sender_id: str
+    """External ID of the agent that sent the message."""
+
+    receiver_id: str
+    """External ID of the agent receiving the message."""
+
+    organization_id: str
+    """External ID of the organization both agents belong to."""
 
     handler_context: HandlerContext
     """The type of handler that should process this message."""
 
-    is_sync: bool = False
-    """True if this is a synchronous conversation awaiting response."""
+    message_id: Optional[int] = None
+    """Database ID of the message record, if persisted."""
 
-    requires_response: bool = False
-    """True if handler response should be captured and sent back."""
+    session_id: Optional[str] = None
+    """Session ID for conversation messages (request-response pairing)."""
+
+    meeting_id: Optional[int] = None
+    """Meeting ID for meeting messages."""
+
+    metadata: dict[str, Any] = field(default_factory=dict)
+    """Additional metadata associated with the message."""
 
 
 # ============================================================================
@@ -68,28 +111,29 @@ class MessageContextEnhanced(MessageContext):
 # ============================================================================
 
 
-@runtime_checkable
-class OneWayHandler(Protocol):
+class OneWayHandler(Protocol[T_OneWay]):
     """Protocol for one-way message handlers.
 
     One-way handlers process fire-and-forget messages. The sender does not
     wait for or expect a response. The handler is invoked asynchronously.
 
+    This is a global handler that processes messages for ALL agents.
+
     Example:
-        @sdk.register_one_way_handler("agent_id")
-        async def handle_notification(message: str, context: MessageContext) -> None:
+        @register_one_way_handler
+        async def handle_notification(message: Notification, context: MessageContext) -> None:
             print(f"Received: {message}")
     """
 
     async def __call__(
         self,
-        message: Any,
+        message: T_OneWay,
         context: MessageContext,
     ) -> None:
         """Process a one-way message.
 
         Args:
-            message: The message content (user-defined type)
+            message: The message content (T_OneWay type)
             context: Message metadata and routing information
 
         Returns:
@@ -101,32 +145,33 @@ class OneWayHandler(Protocol):
         ...
 
 
-@runtime_checkable
-class ConversationHandler(Protocol):
+class ConversationHandler(Protocol[T_Conversation]):
     """Protocol for synchronous conversation handlers.
 
     Conversation handlers process request-response messages. The sender blocks
     and waits for the handler's response with a configurable timeout.
 
+    This is a global handler that processes messages for ALL agents.
+
     Example:
-        @sdk.register_conversation_handler("agent_id")
-        async def handle_query(message: str, context: MessageContext) -> str:
-            return f"Answer to: {message}"
+        @register_conversation_handler
+        async def handle_query(message: Query, context: MessageContext) -> Response:
+            return Response(answer=f"Answer to: {message.question}")
     """
 
     async def __call__(
         self,
-        message: Any,
+        message: T_Conversation,
         context: MessageContext,
-    ) -> Any:
+    ) -> T_Conversation:
         """Process a conversation message and return a response.
 
         Args:
-            message: The message content (user-defined type)
+            message: The message content (T_Conversation type)
             context: Message metadata including session_id
 
         Returns:
-            Response to be sent back to sender. Can be any JSON-serializable type.
+            Response to be sent back to sender (T_Conversation type).
             If no response is needed, return None.
 
         Raises:
@@ -135,32 +180,33 @@ class ConversationHandler(Protocol):
         ...
 
 
-@runtime_checkable
-class MeetingHandler(Protocol):
+class MeetingHandler(Protocol[T_Meeting]):
     """Protocol for multi-agent meeting handlers.
 
     Meeting handlers process messages during active meetings. Handlers are
     invoked for messages where a particular agent has the speaking turn.
 
+    This is a global handler that processes messages for ALL agents.
+
     Example:
-        @sdk.register_meeting_handler("agent_id")
-        async def handle_meeting_turn(message: str, context: MessageContext) -> str:
-            return f"My contribution: ..."
+        @register_meeting_handler
+        async def handle_meeting_turn(message: MeetingMsg, context: MessageContext) -> MeetingMsg:
+            return MeetingMsg(content=f"My contribution: ...")
     """
 
     async def __call__(
         self,
-        message: Any,
+        message: T_Meeting,
         context: MessageContext,
-    ) -> Any:
+    ) -> T_Meeting:
         """Process a meeting message.
 
         Args:
-            message: The message content (user-defined type)
+            message: The message content (T_Meeting type)
             context: Message metadata including meeting_id and turn info
 
         Returns:
-            Message to speak in the meeting. Return None to pass turn silently.
+            Message to speak in the meeting (T_Meeting type). Return None to pass turn silently.
 
         Note:
             The handler can inspect context.meeting_id to understand meeting state.
@@ -168,7 +214,6 @@ class MeetingHandler(Protocol):
         ...
 
 
-@runtime_checkable
 class SystemHandler(Protocol):
     """Protocol for system message handlers.
 
@@ -176,22 +221,24 @@ class SystemHandler(Protocol):
     and other system-generated events. These are primarily for monitoring
     and logging purposes.
 
+    This is a global handler that processes system messages for ALL agents.
+
     Example:
-        @sdk.register_system_handler()
-        async def handle_timeout(message: dict, context: MessageContext) -> None:
+        @register_system_handler
+        async def handle_system(message: dict, context: MessageContext) -> None:
             if message.get("type") == "turn_timeout":
                 print(f"Agent {context.sender_id} timed out")
     """
 
     async def __call__(
         self,
-        message: Any,
+        message: dict[str, Any],
         context: MessageContext,
     ) -> None:
         """Process a system message.
 
         Args:
-            message: System message payload (usually dict)
+            message: System message payload (dict)
             context: Message metadata
 
         Returns:
@@ -204,6 +251,5 @@ class SystemHandler(Protocol):
 # Handler Type Definitions
 # ============================================================================
 
-# Generic handler type that can be any of the above
 AnyHandler = Callable[[Any, MessageContext], Any]
-"""Type for any handler (one-way, conversation, meeting, system)."""
+"""Type alias for any handler callable."""

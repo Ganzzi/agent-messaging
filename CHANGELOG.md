@@ -5,7 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2025-12-15
+## [0.3.0] - 2025-12-16
+
+### Removed
+- **Dead Code Cleanup** - Removed unused code and unnecessary decorators
+  - Removed `@runtime_checkable` decorator from Protocol classes (never used for runtime checks)
+  - Removed unused exceptions: `SessionNotFoundError`, `HandlerExecutionError`, `ConversationTimeoutError`, `MeetingTimeoutError`, `TurnTimeoutError`, `ConnectionError`, `PoolExhaustionError`, `LockAcquisitionError`, `MessageValidationError`, `ConfigurationError`
+  - Removed duplicate `MessageContext` from `models.py` (kept the complete version in `handlers/types.py`)
+  - Cleaned up unreachable code in `meeting.py`
+
+### Fixed
+- **Import Cleanup** - Fixed all imports to use correct `MessageContext` from `handlers` module
+  - Updated `conftest.py`, `test_global_handlers.py`, `test_models.py`
+  - All 63 tests passing (100% success rate)
+
+### Changed
+- **Code Quality** - Improved package cleanliness and maintainability
+  - Removed unused `runtime_checkable` import from `types.py`
+  - Protocols still work for type hints (static type checking)
+  - Simplified exception hierarchy (only exceptions actually raised in code)
+
+### Performance
+- Minor reduction in module load time due to removed decorators and unused code
+
+---
+
+## [0.2.0] - 2025-12-15
 
 ### Added
 - **One-Way Message Query Methods** - Complete message retrieval and filtering

@@ -21,8 +21,7 @@ from agent_messaging.models import (
     MeetingParticipant,
     Message,
     MeetingEvent,
-    # API Context Models
-    MessageContext,
+    # Meeting Event Data Models
     MeetingEventPayload,
     # DTOs
     CreateOrganizationRequest,
@@ -32,6 +31,7 @@ from agent_messaging.models import (
     OrganizationResponse,
     AgentResponse,
 )
+from agent_messaging.handlers import MessageContext
 
 
 class TestEnums:
@@ -367,42 +367,48 @@ class TestAPIContextModels:
 
     def test_message_context_model(self):
         """Test MessageContext model."""
+        from agent_messaging.handlers import HandlerContext
+
         sender_id = "alice"
-        recipient_id = "bob"
-        message_id = uuid4()
-        timestamp = datetime.now()
-        session_id = uuid4()
-        meeting_id = uuid4()
+        receiver_id = "bob"
+        organization_id = "org1"
+        message_id = 123
+        session_id = "session-123"
+        meeting_id = 456
 
         context = MessageContext(
             sender_id=sender_id,
-            recipient_id=recipient_id,
+            receiver_id=receiver_id,
+            organization_id=organization_id,
+            handler_context=HandlerContext.CONVERSATION,
             message_id=message_id,
-            timestamp=timestamp,
             session_id=session_id,
             meeting_id=meeting_id,
         )
 
         assert context.sender_id == sender_id
-        assert context.recipient_id == recipient_id
+        assert context.receiver_id == receiver_id
+        assert context.organization_id == organization_id
+        assert context.handler_context == HandlerContext.CONVERSATION
         assert context.message_id == message_id
-        assert context.timestamp == timestamp
         assert context.session_id == session_id
         assert context.meeting_id == meeting_id
 
     def test_message_context_optional_fields(self):
         """Test MessageContext with optional fields."""
+        from agent_messaging.handlers import HandlerContext
+
         context = MessageContext(
             sender_id="alice",
-            recipient_id="bob",
-            message_id=uuid4(),
-            timestamp=datetime.now(),
-            session_id=None,
-            meeting_id=None,
+            receiver_id="bob",
+            organization_id="org1",
+            handler_context=HandlerContext.ONE_WAY,
         )
 
+        assert context.message_id is None
         assert context.session_id is None
         assert context.meeting_id is None
+        assert context.metadata == {}
 
     def test_meeting_event_payload_model(self):
         """Test MeetingEventPayload model."""
