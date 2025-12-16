@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-12-16
+
+### Fixed
+- **Database schema initialization:** Resolved `ERROR: column "locked_agent_id" does not exist` by reinitializing the database and improving schema initialization scripts. Added `scripts/recreate_db.py` and `scripts/cleanup_db.py` to help keep local databases in sync with migrations.
+- **Conversation bug:** Fixed calls to a non-existent `AgentRepository.get_organization()` in `agent_messaging/messaging/conversation.py` by using the agent's `organization_id` directly.
+- **Integration test:** Added `tests/test_send_and_wait_fix.py` to validate `send_and_wait()` end-to-end for the sync conversation flow.
+- **Validation:** Verified full test suite after fixes — **179/179 tests passing (100%)**.
+
 ## [0.3.0] - 2025-12-16
 
 ### Removed

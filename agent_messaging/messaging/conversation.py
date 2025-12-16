@@ -224,15 +224,12 @@ class Conversation(Generic[T_Conversation]):
                     metadata=metadata or {},
                 )
 
-                # Get organization for context
-                sender_org = await self._agent_repo.get_organization(sender.id)
-                org_external_id = sender_org.external_id if sender_org else "unknown"
-
                 # Create message context
+                # Note: organization_id is set to org UUID as string since we don't have access to org repo
                 context = MessageContext(
                     sender_id=sender_external_id,
                     receiver_id=recipient_external_id,
-                    organization_id=org_external_id,
+                    organization_id=str(sender.organization_id),
                     handler_context=HandlerContext.CONVERSATION,
                     message_id=message_id,
                     session_id=str(session.id),
@@ -436,15 +433,12 @@ class Conversation(Generic[T_Conversation]):
             metadata=metadata or {},
         )
 
-        # Get organization for context
-        sender_org = await self._agent_repo.get_organization(sender.id)
-        org_external_id = sender_org.external_id if sender_org else "unknown"
-
         # Create message context
+        # Note: organization_id is set to org UUID as string since we don't have access to org repo
         context = MessageContext(
             sender_id=sender_external_id,
             receiver_id=recipient_external_id,
-            organization_id=org_external_id,
+            organization_id=str(sender.organization_id),
             handler_context=HandlerContext.CONVERSATION,
             message_id=message_id,
             session_id=str(session.id),
@@ -521,9 +515,8 @@ class Conversation(Generic[T_Conversation]):
         # Send ending message to both agents if handler is registered
         ending_content = {"type": "conversation_ended", "reason": "explicit_end"}
 
-        # Get organization for context
-        sender_org = await self._agent_repo.get_organization(agent1.id)
-        org_external_id = sender_org.external_id if sender_org else "unknown"
+        # Note: organization_id is set to org UUID as string since we don't have access to org repo
+        org_external_id = str(agent1.organization_id)
 
         # Send to agent1 if handler is registered
         if has_handler(HandlerContext.CONVERSATION):
@@ -792,9 +785,8 @@ class Conversation(Generic[T_Conversation]):
             logger.info(f"No pending messages for {agent_external_id}")
             return
 
-        # Get organization for context
-        agent_org = await self._agent_repo.get_organization(agent.id)
-        org_external_id = agent_org.external_id if agent_org else "unknown"
+        # Note: organization_id is set to org UUID as string since we don't have access to org repo
+        org_external_id = str(agent.organization_id)
 
         # Process each pending message
         for message in pending_messages:
