@@ -552,6 +552,7 @@ class AgentMessaging(Generic[T_OneWay, T_Conversation, T_Meeting]):
         return OneWayMessenger[T_OneWay](
             message_repo=self._message_repo,
             agent_repo=self._agent_repo,
+            org_repo=self._org_repo,
         )
 
     @property

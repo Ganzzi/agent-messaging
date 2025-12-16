@@ -1,11 +1,13 @@
 """One-way messaging implementation (one-to-many)."""
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional
 
 from ..database.repositories.agent import AgentRepository
 from ..database.repositories.message import MessageRepository
+from ..database.repositories.organization import OrganizationRepository
 from ..exceptions import AgentNotFoundError, NoHandlerRegisteredError
 from ..handlers.registry import (
     get_handler,
@@ -30,15 +32,18 @@ class OneWayMessenger(Generic[T_OneWay]):
         self,
         message_repo: MessageRepository,
         agent_repo: AgentRepository,
+        org_repo: OrganizationRepository,
     ):
         """Initialize the OneWayMessenger.
 
         Args:
             message_repo: Repository for message operations
             agent_repo: Repository for agent operations
+            org_repo: Repository for organization operations
         """
         self._message_repo = message_repo
         self._agent_repo = agent_repo
+        self._org_repo = org_repo
 
     def _serialize_content(self, message: T_OneWay) -> Dict[str, Any]:
         """Serialize message content to dict for JSONB storage.
@@ -138,7 +143,7 @@ class OneWayMessenger(Generic[T_OneWay]):
         content_dict = self._serialize_content(message)
 
         # Get organization from sender for context
-        sender_org = await self._agent_repo.get_organization(sender.id)
+        sender_org = await self._org_repo.get_by_id(sender.organization_id)
         org_external_id = sender_org.external_id if sender_org else "unknown"
 
         # Send to all recipients
@@ -164,10 +169,13 @@ class OneWayMessenger(Generic[T_OneWay]):
             )
 
             # Invoke global handler asynchronously (fire-and-forget)
-            invoke_handler_async(
-                message,
-                context,
-                HandlerContext.ONE_WAY,
+            # Use asyncio.create_task to run handler in background without waiting
+            asyncio.create_task(
+                invoke_handler_async(
+                    HandlerContext.ONE_WAY,
+                    message,
+                    context,
+                )
             )
 
             message_ids.append(str(message_id))

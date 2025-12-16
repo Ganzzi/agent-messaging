@@ -281,20 +281,24 @@ class Conversation(Generic[T_Conversation]):
 
                 except asyncio.TimeoutError:
                     # Handler didn't respond immediately, invoke asynchronously
-                    invoke_handler_async(
-                        message,
-                        context,
-                        HandlerContext.CONVERSATION,
+                    asyncio.create_task(
+                        invoke_handler_async(
+                            HandlerContext.CONVERSATION,
+                            message,
+                            context,
+                        )
                     )
                     logger.debug(f"Handler invoked asynchronously for message {message_id}")
                 except Exception as e:
                     # Handler error - log and continue waiting for manual response
                     logger.error(f"Handler error for message {message_id}: {e}", exc_info=True)
                     # Still invoke async in case handler wants to retry
-                    invoke_handler_async(
-                        message,
-                        context,
-                        HandlerContext.CONVERSATION,
+                    asyncio.create_task(
+                        invoke_handler_async(
+                            HandlerContext.CONVERSATION,
+                            message,
+                            context,
+                        )
                     )
 
                 # Check for immediate response (handler might have sent a reply synchronously)
@@ -449,10 +453,12 @@ class Conversation(Generic[T_Conversation]):
 
         # Invoke recipient handler asynchronously if registered
         if has_handler(HandlerContext.CONVERSATION):
-            invoke_handler_async(
-                message,
-                context,
-                HandlerContext.CONVERSATION,
+            asyncio.create_task(
+                invoke_handler_async(
+                    HandlerContext.CONVERSATION,
+                    message,
+                    context,
+                )
             )
 
         # Wake any waiting agent for this session
@@ -536,10 +542,12 @@ class Conversation(Generic[T_Conversation]):
                 message_id=message_id,
                 session_id=str(session.id),
             )
-            invoke_handler_async(
-                ending_content,
-                context,
-                HandlerContext.CONVERSATION,
+            asyncio.create_task(
+                invoke_handler_async(
+                    HandlerContext.CONVERSATION,
+                    ending_content,
+                    context,
+                )
             )
 
         # Send to agent2 if handler is registered
@@ -559,10 +567,12 @@ class Conversation(Generic[T_Conversation]):
                 message_id=message_id,
                 session_id=str(session.id),
             )
-            invoke_handler_async(
-                ending_content,
-                context,
-                HandlerContext.CONVERSATION,
+            asyncio.create_task(
+                invoke_handler_async(
+                    HandlerContext.CONVERSATION,
+                    ending_content,
+                    context,
+                )
             )
 
         logger.info(f"Conversation ended: {session.id}")
@@ -802,15 +812,16 @@ class Conversation(Generic[T_Conversation]):
                 message_id=message.id,
                 session_id=str(message.session_id) if message.session_id else None,
             )
-
             # Deserialize message content
             content = self._deserialize_content(message.content)
 
-            # Invoke handler
-            invoke_handler_async(
-                content,
-                context,
-                HandlerContext.CONVERSATION,
+            # Invoke handler - run in background task
+            asyncio.create_task(
+                invoke_handler_async(
+                    HandlerContext.CONVERSATION,
+                    content,
+                    context,
+                )
             )
 
             # Mark message as read (processed)

@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from agent_messaging.messaging.one_way import OneWayMessenger
 from agent_messaging.models import Agent, MessageType, Organization
-from agent_messaging.handlers.types import MessageContext
+from agent_messaging.handlers.types import MessageContext, HandlerContext
 from agent_messaging.exceptions import AgentNotFoundError, NoHandlerRegisteredError
 from agent_messaging.handlers import register_one_way_handler, clear_handlers
 
@@ -44,7 +44,14 @@ def mock_agent_repo():
     repo = MagicMock()
     repo.get_by_external_id = AsyncMock(return_value=None)
     repo.get_by_id = AsyncMock(return_value=None)
-    repo.get_organization = AsyncMock(
+    return repo
+
+
+@pytest.fixture
+def mock_org_repo():
+    """Mock organization repository for testing."""
+    repo = MagicMock()
+    repo.get_by_id = AsyncMock(
         return_value=Organization(
             id=uuid4(),
             external_id="test_org",
@@ -57,11 +64,12 @@ def mock_agent_repo():
 
 
 @pytest.fixture
-def one_way_messenger(mock_message_repo, mock_agent_repo):
+def one_way_messenger(mock_message_repo, mock_agent_repo, mock_org_repo):
     """OneWayMessenger instance for testing."""
     return OneWayMessenger(
         message_repo=mock_message_repo,
         agent_repo=mock_agent_repo,
+        org_repo=mock_org_repo,
     )
 
 
@@ -117,8 +125,9 @@ class TestOneWayMessenger:
         # Verify handler was invoked
         mock_invoke_handler_async.assert_called_once()
         call_args = mock_invoke_handler_async.call_args
-        assert call_args[0][0] == {"text": "Hello!"}  # message (positional arg 0)
-        assert isinstance(call_args[0][1], MessageContext)  # context (positional arg 1)
+        assert call_args[0][0] == HandlerContext.ONE_WAY  # handler_context (positional arg 0)
+        assert call_args[0][1] == {"text": "Hello!"}  # message (positional arg 1)
+        assert isinstance(call_args[0][2], MessageContext)  # context (positional arg 2)
 
     @pytest.mark.asyncio
     async def test_send_sender_not_found(self, one_way_messenger, mock_agent_repo):
