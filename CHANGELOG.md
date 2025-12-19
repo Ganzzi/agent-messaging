@@ -5,6 +5,93 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-12-19
+
+### Removed
+- **Handler System Cleanup** - Removed unused handler types and dead code
+  - Removed `HandlerContext.MEETING` enum value (meeting messages handled internally)
+  - Removed `HandlerContext.SYSTEM` enum value (never invoked)
+  - Removed `register_meeting_handler()` function (not used for meeting coordination)
+  - Removed `register_system_handler()` function (never called)
+  - Removed `MeetingHandler` protocol (meetings use internal processing + event handlers)
+  - Removed `SystemHandler` protocol (unused)
+
+### Added
+- **Comprehensive Handler Architecture Documentation**
+  - Added `docs/architecture/handler-systems.md` - Complete guide to dual handler system
+  - Explains why two handler patterns exist (global message vs instance event)
+  - Type safety guide with TypedDict and Pydantic examples
+  - Decision tree for choosing the right handler type
+  - Best practices and FAQ section
+- **Type Hints in Handler Protocols** - Enhanced IDE support
+  - Updated `OneWayHandler` protocol with comprehensive type hint examples
+  - Updated `ConversationHandler` protocol with request/response type examples
+  - Added TypedDict and Pydantic usage examples in docstrings
+- **Updated Examples** - All examples now use correct handler patterns
+  - `examples/04_brainstorming_meeting.py` - Updated to use event handlers instead of message handlers
+  - Demonstrates proper meeting lifecycle event handling
+  - All examples verified error-free with proper type hints
+
+### Changed
+- **API Documentation** - Complete handler system documentation rewrite
+  - Updated `docs/api-reference.md` with new handler system explanation
+  - Added type safety section with good/bad examples
+  - Added "Removed Handlers" migration guide for v0.4.0 changes
+  - Updated version to 0.4.0
+- **README** - Updated with correct handler usage
+  - Fixed handler registration example (was using non-existent API)
+  - Updated version badge to 0.4.0
+  - Added link to Handler Systems Architecture documentation
+  - Updated Documentation section with architecture guide link
+
+### Fixed
+- **Examples** - Corrected invalid handler usage
+  - `examples/04_brainstorming_meeting.py` was using removed `@register_meeting_handler`
+  - Now uses instance event handlers (`MeetingEventType`) for meeting lifecycle
+  - Demonstrates proper event handler registration pattern
+
+### Documentation
+- **Handler Systems Architecture** (`docs/architecture/handler-systems.md`)
+  - 400+ lines of comprehensive documentation
+  - Two handler patterns explained (global message vs instance event)
+  - Type safety guide (TypedDict, Pydantic, mypy)
+  - Decision tree for handler selection
+  - Use cases and best practices
+  - FAQ with common questions
+- **API Reference Updates**
+  - Removed documentation for deleted handlers
+  - Added MESSAGE_NOTIFICATION handler documentation
+  - Added type safety section with examples
+  - Migration guide for v0.4.0 changes
+
+### Testing
+- **179/179 tests passing (100% success rate)**
+- Updated tests to remove references to deleted handlers
+- `test_global_handlers.py` updated to test only 3 handler contexts (was 5)
+- All handler registration tests passing
+
+### Migration Guide
+
+**If you were using** `@register_meeting_handler`:
+- Meeting messages are now handled internally by the meeting system
+- Use **instance event handlers** for meeting lifecycle events instead
+- Example:
+  ```python
+  async with AgentMessaging() as sdk:
+      sdk._event_handler.register_handler(
+          MeetingEventType.MEETING_STARTED,
+          my_event_handler
+      )
+  ```
+
+**If you were using** `@register_system_handler`:
+- This was never actually invoked by the SDK
+- Remove any registrations - they had no effect
+
+**For all other handlers**: No changes needed, they continue to work as before.
+
+---
+
 ## [0.3.2] - 2025-12-16
 
 ### Fixed

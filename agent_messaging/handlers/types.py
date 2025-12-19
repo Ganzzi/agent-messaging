@@ -23,8 +23,6 @@ __all__ = [
     # Handler protocols
     "OneWayHandler",
     "ConversationHandler",
-    "MeetingHandler",
-    "SystemHandler",
     # Type aliases
     "AnyHandler",
 ]
@@ -60,11 +58,8 @@ class HandlerContext(str, Enum):
     CONVERSATION = "conversation"
     """Synchronous conversation requiring request-response pattern."""
 
-    MEETING = "meeting"
-    """Multi-agent meeting messages during active meeting."""
-
-    SYSTEM = "system"
-    """Internal system messages (timeouts, events, etc.)."""
+    MESSAGE_NOTIFICATION = "message_notification"
+    """Notification that a new message has arrived for an agent that is not currently waiting."""
 
 
 # ============================================================================
@@ -119,10 +114,41 @@ class OneWayHandler(Protocol[T_OneWay]):
 
     This is a global handler that processes messages for ALL agents.
 
-    Example:
+    Type Safety:
+        While the generic T_OneWay is erased at runtime, you should use explicit
+        type hints for IDE support and static type checking:
+
+    Example with TypedDict:
+        from typing import TypedDict
+
+        class Notification(TypedDict):
+            type: str
+            text: str
+            priority: str
+
         @register_one_way_handler
-        async def handle_notification(message: Notification, context: MessageContext) -> None:
-            print(f"Received: {message}")
+        async def handle_notification(
+            message: Notification,  # ← Type hint for IDE autocomplete
+            context: MessageContext
+        ) -> None:
+            # IDE knows message.text, message.priority exist
+            print(f"[{message['priority']}] {message['text']}")
+
+    Example with Pydantic:
+        from pydantic import BaseModel
+
+        class Notification(BaseModel):
+            type: str
+            text: str
+            priority: str = "normal"
+
+        @register_one_way_handler
+        async def handle_notification(
+            message: Notification,  # ← Pydantic model
+            context: MessageContext
+        ) -> None:
+            # Full IDE autocomplete + runtime validation
+            print(f"[{message.priority}] {message.text}")
     """
 
     async def __call__(
@@ -153,10 +179,50 @@ class ConversationHandler(Protocol[T_Conversation]):
 
     This is a global handler that processes messages for ALL agents.
 
-    Example:
+    Type Safety:
+        Use explicit type hints for request and response types. Both should be
+        the same type (T_Conversation), but you can use unions or inheritance
+        for flexibility.
+
+    Example with TypedDict:
+        from typing import TypedDict
+
+        class Query(TypedDict):
+            question: str
+            context: str
+
+        class Response(TypedDict):
+            answer: str
+            confidence: float
+
         @register_conversation_handler
-        async def handle_query(message: Query, context: MessageContext) -> Response:
-            return Response(answer=f"Answer to: {message.question}")
+        async def handle_query(
+            message: Query,  # ← Type hint for request
+            context: MessageContext
+        ) -> Response:  # ← Type hint for response
+            # IDE knows message.question exists
+            answer = process_question(message['question'])
+            return {"answer": answer, "confidence": 0.95}
+
+    Example with Pydantic:
+        from pydantic import BaseModel
+
+        class Query(BaseModel):
+            question: str
+            context: str = ""
+
+        class Response(BaseModel):
+            answer: str
+            confidence: float = 1.0
+
+        @register_conversation_handler
+        async def handle_query(
+            message: Query,  # ← Pydantic request model
+            context: MessageContext
+        ) -> Response:  # ← Pydantic response model
+            # Full IDE autocomplete + validation
+            answer = process_question(message.question)
+            return Response(answer=answer, confidence=0.95)
     """
 
     async def __call__(
@@ -176,73 +242,6 @@ class ConversationHandler(Protocol[T_Conversation]):
 
         Raises:
             Exception: Any exception is logged; timeout is managed separately
-        """
-        ...
-
-
-class MeetingHandler(Protocol[T_Meeting]):
-    """Protocol for multi-agent meeting handlers.
-
-    Meeting handlers process messages during active meetings. Handlers are
-    invoked for messages where a particular agent has the speaking turn.
-
-    This is a global handler that processes messages for ALL agents.
-
-    Example:
-        @register_meeting_handler
-        async def handle_meeting_turn(message: MeetingMsg, context: MessageContext) -> MeetingMsg:
-            return MeetingMsg(content=f"My contribution: ...")
-    """
-
-    async def __call__(
-        self,
-        message: T_Meeting,
-        context: MessageContext,
-    ) -> T_Meeting:
-        """Process a meeting message.
-
-        Args:
-            message: The message content (T_Meeting type)
-            context: Message metadata including meeting_id and turn info
-
-        Returns:
-            Message to speak in the meeting (T_Meeting type). Return None to pass turn silently.
-
-        Note:
-            The handler can inspect context.meeting_id to understand meeting state.
-        """
-        ...
-
-
-class SystemHandler(Protocol):
-    """Protocol for system message handlers.
-
-    System handlers process internal messages like timeouts, meeting events,
-    and other system-generated events. These are primarily for monitoring
-    and logging purposes.
-
-    This is a global handler that processes system messages for ALL agents.
-
-    Example:
-        @register_system_handler
-        async def handle_system(message: dict, context: MessageContext) -> None:
-            if message.get("type") == "turn_timeout":
-                print(f"Agent {context.sender_id} timed out")
-    """
-
-    async def __call__(
-        self,
-        message: dict[str, Any],
-        context: MessageContext,
-    ) -> None:
-        """Process a system message.
-
-        Args:
-            message: System message payload (dict)
-            context: Message metadata
-
-        Returns:
-            None - system messages are informational
         """
         ...
 

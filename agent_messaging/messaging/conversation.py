@@ -224,6 +224,34 @@ class Conversation(Generic[T_Conversation]):
                     metadata=metadata or {},
                 )
 
+                # Check if recipient is currently locked (waiting for a response)
+                # If not locked, notify them that a message arrived
+                if session.locked_agent_id != recipient.id:
+                    # Create notification context
+                    notification_context = MessageContext(
+                        sender_id=sender_external_id,
+                        receiver_id=recipient_external_id,
+                        organization_id=str(sender.organization_id),
+                        handler_context=HandlerContext.MESSAGE_NOTIFICATION,
+                        message_id=message_id,
+                        session_id=str(session.id),
+                        metadata=metadata or {},
+                    )
+
+                    # Invoke notification handler asynchronously if registered
+                    if has_handler(HandlerContext.MESSAGE_NOTIFICATION):
+                        asyncio.create_task(
+                            invoke_handler_async(
+                                HandlerContext.MESSAGE_NOTIFICATION,
+                                message,
+                                notification_context,
+                            )
+                        )
+                        logger.info(
+                            f"Notification handler invoked for message {message_id} "
+                            f"(recipient {recipient_external_id} not locked)"
+                        )
+
                 # Create message context
                 # Note: organization_id is set to org UUID as string since we don't have access to org repo
                 context = MessageContext(
@@ -432,6 +460,34 @@ class Conversation(Generic[T_Conversation]):
             message_type=MessageType.USER_DEFINED,
             metadata=metadata or {},
         )
+
+        # Check if recipient is currently locked (waiting for a response)
+        # If not locked, notify them that a message arrived
+        if session.locked_agent_id != recipient.id:
+            # Create notification context
+            notification_context = MessageContext(
+                sender_id=sender_external_id,
+                receiver_id=recipient_external_id,
+                organization_id=str(sender.organization_id),
+                handler_context=HandlerContext.MESSAGE_NOTIFICATION,
+                message_id=message_id,
+                session_id=str(session.id),
+                metadata=metadata or {},
+            )
+
+            # Invoke notification handler asynchronously if registered
+            if has_handler(HandlerContext.MESSAGE_NOTIFICATION):
+                asyncio.create_task(
+                    invoke_handler_async(
+                        HandlerContext.MESSAGE_NOTIFICATION,
+                        message,
+                        notification_context,
+                    )
+                )
+                logger.debug(
+                    f"Notification handler invoked for message {message_id} "
+                    f"(recipient {recipient_external_id} not locked)"
+                )
 
         # Create message context
         # Note: organization_id is set to org UUID as string since we don't have access to org repo

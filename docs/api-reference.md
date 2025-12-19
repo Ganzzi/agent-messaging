@@ -1,10 +1,10 @@
 # Agent Messaging Protocol - API Reference
 
-> Complete API documentation for the Agent Messaging Protocol SDK v0.3.1
+> Complete API documentation for the Agent Messaging Protocol SDK v0.4.0
 
-**Version:** 0.3.1  
+**Version:** 0.4.0  
 **Status:** Production Ready  
-**Last Updated:** December 16, 2025
+**Last Updated:** December 19, 2025
 
 ---
 
@@ -903,70 +903,242 @@ async def get_turn_statistics(meeting_id: str) -> Dict[str, Any]:
 
 ## Handler System
 
-### Global Handler Registration
+The Agent Messaging Protocol uses two distinct handler systems:
 
-Handlers are registered globally and apply to all agents of a given type.
+1. **Global Message Handlers** - Process message content (business logic)
+2. **Instance Event Handlers** - React to meeting lifecycle events (integration logic)
+
+For a comprehensive guide on when and how to use each system, see [Handler Systems Architecture](architecture/handler-systems.md).
+
+### Global Message Handlers
+
+Message handlers process the content of messages sent between agents. They are registered globally using decorators and apply to all SDK instances.
+
+#### Available Handler Types
 
 ```python
 from agent_messaging import (
     register_one_way_handler,
     register_conversation_handler,
-    register_meeting_handler,
-    register_system_handler,
+    register_message_notification_handler,
     MessageContext
 )
+```
+
+#### One-Way Message Handler
+
+Handles fire-and-forget messages. The sender doesn't wait for a response.
+
+```python
+from typing import TypedDict
+
+class Notification(TypedDict):
+    title: str
+    text: str
+    priority: str
 
 @register_one_way_handler
-async def handle_notification(message: dict, context: MessageContext) -> None:
+async def handle_notification(
+    message: Notification,  # ← Type hint for IDE support
+    context: MessageContext
+) -> None:
     """
     Handle one-way notifications.
     
-    Called asynchronously. Return value ignored.
+    Called asynchronously for each recipient. Return value is ignored.
+    
+    Args:
+        message: The notification payload
+        context: Message routing information
     """
-    print(f"Received from {context.sender_id}: {message}")
+    print(f"[{context.receiver_id}] Received from {context.sender_id}: {message['text']}")
+```
+
+#### Conversation Message Handler
+
+Handles request-response messages. The sender blocks waiting for a response.
+
+```python
+from pydantic import BaseModel
+
+class Query(BaseModel):
+    question: str
+    context: str = ""
+
+class Response(BaseModel):
+    answer: str
+    confidence: float = 1.0
 
 @register_conversation_handler
-async def handle_query(message: dict, context: MessageContext) -> dict:
+async def handle_query(
+    message: Query,  # ← Type hint for request
+    context: MessageContext
+) -> Response:  # ← Type hint for response
     """
     Handle synchronous conversation (request-response).
     
-    Response is auto-sent if returned within 100ms.
-    Otherwise, must call conversation.respond() in async handler.
-    """
-    return {"answer": "Hello " + message["question"]}
-
-@register_meeting_handler
-async def handle_meeting_turn(message: dict, context: MessageContext) -> dict:
-    """
-    Handle meeting turn messages.
+    If response is returned within timeout, it's automatically sent.
+    Otherwise, the handler continues async and sender times out.
     
-    Called when agent has the speaking turn in a meeting.
-    """
-    return {"contribution": "My thoughts on this..."}
-
-@register_system_handler
-async def handle_system(message: dict, context: MessageContext) -> None:
-    """
-    Handle system events (timeouts, etc).
+    Args:
+        message: The query payload
+        context: Message routing information (includes session_id)
     
-    Used for monitoring and logging.
+    Returns:
+        Response payload to send back to sender
     """
-    if message.get("type") == "turn_timeout":
-        print(f"Agent {context.sender_id} timed out")
+    answer = process_question(message.question)
+    return Response(answer=answer, confidence=0.95)
+```
+
+#### Message Notification Handler
+
+Notifies agents when messages arrive while they're not actively waiting.
+
+```python
+@register_message_notification_handler
+async def notify_agent(
+    message: dict,
+    context: MessageContext
+) -> None:
+    """
+    Handle message arrival notifications.
+    
+    Called when a message arrives for an agent that is NOT currently
+    locked/waiting (i.e., send_no_wait was used).
+    
+    Use this for push notifications, UI updates, etc.
+    
+    Args:
+        message: The message payload
+        context: Message routing information
+    """
+    send_push_notification(
+        context.receiver_id,
+        f"New message from {context.sender_id}"
+    )
+```
+
+### Instance Event Handlers
+
+Event handlers react to meeting lifecycle events. They are registered per-SDK-instance and allow different behaviors for different contexts.
+
+#### Available Event Types
+
+```python
+from agent_messaging.models import MeetingEventType, MeetingEvent
+
+MeetingEventType.MEETING_STARTED       # Meeting begins
+MeetingEventType.MEETING_ENDED         # Meeting ends
+MeetingEventType.TURN_CHANGED          # Speaking turn changes
+MeetingEventType.PARTICIPANT_JOINED    # Agent joins meeting
+MeetingEventType.PARTICIPANT_LEFT      # Agent leaves meeting
+MeetingEventType.TIMEOUT_OCCURRED      # Speaker timeout
+```
+
+#### Registration Example
+
+```python
+async with AgentMessaging() as sdk:
+    # Register event handler for this SDK instance
+    async def on_meeting_started(event: MeetingEvent):
+        """Called when a meeting starts."""
+        print(f"Meeting {event.meeting_id} started!")
+        print(f"Host: {event.data.host_id}")
+        print(f"Participants: {event.data.participant_ids}")
+    
+    sdk._event_handler.register_handler(
+        MeetingEventType.MEETING_STARTED,
+        on_meeting_started
+    )
+    
+    # Use SDK with event handlers
+    meeting_id = await sdk.meeting.create_meeting("alice", ["bob"])
+    await sdk.meeting.start_meeting("alice", meeting_id)
+    # → Triggers on_meeting_started event
+```
+
+### Handler Type Safety
+
+The SDK uses generic types at compile time but these are erased at runtime. **Use explicit type hints** for IDE support and static type checking:
+
+#### ✅ Good: With Type Hints
+
+```python
+from typing import TypedDict
+
+class Notification(TypedDict):
+    type: str
+    text: str
+
+@register_one_way_handler
+async def handle(message: Notification, context: MessageContext) -> None:
+    # IDE knows message.text exists!
+    print(message['text'])
+```
+
+#### ❌ Bad: Without Type Hints
+
+```python
+@register_one_way_handler
+async def handle(message, context):
+    # IDE doesn't know what 'message' contains
+    # No autocomplete, no type checking
+    print(message['text'])  # Might fail at runtime!
+```
+
+#### Pydantic for Runtime Validation
+
+For runtime type checking, use Pydantic models:
+
+```python
+from pydantic import BaseModel
+
+class Notification(BaseModel):
+    text: str
+    priority: str = "normal"
+
+@register_one_way_handler
+async def handle(message: dict, context: MessageContext) -> None:
+    try:
+        # Validate at runtime
+        notif = Notification(**message)
+        print(f"Valid: {notif.text}")
+    except ValidationError as e:
+        print(f"Invalid message: {e}")
 ```
 
 ### Handler Context
 
+The `MessageContext` object provides routing information for all message handlers:
+
 ```python
+from dataclasses import dataclass
+
+@dataclass
 class MessageContext:
-    """Context passed to all handlers."""
+    """Context passed to all message handlers."""
+    
     sender_id: str                    # Sender's external ID
     receiver_id: str                  # Receiver's external ID
-    message_id: Optional[UUID]        # Message UUID
-    session_id: Optional[UUID]        # Session UUID (conversations only)
-    meeting_id: Optional[UUID]        # Meeting UUID (meetings only)
-    timestamp: datetime               # When message was received
+    organization_id: str              # Organization external ID
+    handler_context: HandlerContext   # Which handler type (ONE_WAY, CONVERSATION, etc.)
+    message_id: Optional[int]         # Message database ID
+    session_id: Optional[str]         # Session ID (conversations only)
+    meeting_id: Optional[int]         # Meeting ID (meetings only)
+    metadata: dict[str, Any]          # Custom metadata
 ```
+
+### Removed Handlers (v0.4.0)
+
+The following handlers were removed in v0.4.0:
+
+- ❌ `register_meeting_handler()` - Meeting messages are handled internally
+- ❌ `register_system_handler()` - Never invoked, use event handlers instead
+- ❌ `HandlerContext.MEETING` - Removed enum value
+- ❌ `HandlerContext.SYSTEM` - Removed enum value
+
+**Migration**: Use **instance event handlers** for meeting lifecycle events instead.
 
 ---
 

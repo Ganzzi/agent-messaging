@@ -38,17 +38,27 @@ def register_conversation_handler(handler: AnyHandler) -> AnyHandler:
     return handler
 
 
-def register_meeting_handler(handler: AnyHandler) -> AnyHandler:
-    """Register a handler for meeting messages."""
-    _handlers[HandlerContext.MEETING] = handler
-    logger.info(f"Registered meeting handler: {handler.__name__}")
-    return handler
+def register_message_notification_handler(handler: AnyHandler) -> AnyHandler:
+    """Register a handler for message arrival notifications.
 
+    This handler is called when a message arrives for an agent that is NOT
+    currently locked/waiting. It allows the agent to be notified that they
+    have a new message that should be responded to.
 
-def register_system_handler(handler: AnyHandler) -> AnyHandler:
-    """Register a handler for system messages."""
-    _handlers[HandlerContext.SYSTEM] = handler
-    logger.info(f"Registered system handler: {handler.__name__}")
+    The handler receives only the MessageContext (not the message content).
+    The agent should then call get_unread_messages() or get_or_wait_for_response()
+    to retrieve and process the message.
+
+    Handler signature: async def handler(context: MessageContext) -> None
+
+    Example:
+        @register_message_notification_handler
+        async def notify_agent(context: MessageContext) -> None:
+            print(f"Agent {context.receiver_id} has new message from {context.sender_id}")
+            # Agent should now fetch and process the message
+    """
+    _handlers[HandlerContext.MESSAGE_NOTIFICATION] = handler
+    logger.info(f"Registered message notification handler: {handler.__name__}")
     return handler
 
 

@@ -9,8 +9,6 @@ from agent_messaging.handlers import (
     MessageContext,
     register_one_way_handler,
     register_conversation_handler,
-    register_meeting_handler,
-    register_system_handler,
     has_handler,
     get_handler,
     invoke_handler,
@@ -35,12 +33,11 @@ class TestHandlerContextEnum:
         """Test that HandlerContext has the expected values."""
         assert HandlerContext.ONE_WAY.value == "one_way"
         assert HandlerContext.CONVERSATION.value == "conversation"
-        assert HandlerContext.MEETING.value == "meeting"
-        assert HandlerContext.SYSTEM.value == "system"
+        assert HandlerContext.MESSAGE_NOTIFICATION.value == "message_notification"
 
     def test_handler_context_enum_count(self):
-        """Test that HandlerContext has exactly 4 values."""
-        assert len(HandlerContext) == 4
+        """Test that HandlerContext has exactly 3 values (ONE_WAY, CONVERSATION, MESSAGE_NOTIFICATION)."""
+        assert len(HandlerContext) == 3
 
 
 class TestGlobalHandlerRegistration:
@@ -63,24 +60,6 @@ class TestGlobalHandlerRegistration:
 
         register_conversation_handler(handler)
         assert has_handler(HandlerContext.CONVERSATION)
-
-    def test_register_meeting_handler(self):
-        """Test registering a meeting handler."""
-
-        async def handler(msg, ctx):
-            return "contribution"
-
-        register_meeting_handler(handler)
-        assert has_handler(HandlerContext.MEETING)
-
-    def test_register_system_handler(self):
-        """Test registering a system handler."""
-
-        async def handler(msg, ctx):
-            return None
-
-        register_system_handler(handler)
-        assert has_handler(HandlerContext.SYSTEM)
 
     def test_register_as_decorator(self):
         """Test using register function as decorator."""

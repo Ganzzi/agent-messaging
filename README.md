@@ -5,7 +5,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/agent-messaging.svg)](https://pypi.org/project/agent-messaging/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: v0.3.2 Released](https://img.shields.io/badge/Status-v0.3.2%20Released-brightgreen.svg)]()
+[![Status: v0.4.0 Released](https://img.shields.io/badge/Status-v0.4.0%20Released-brightgreen.svg)]()
 [![Tests: 179/179 (100%)](https://img.shields.io/badge/Tests-179%2F179%20(100%25)-brightgreen.svg)]()
 
 **Agent Messaging Protocol** is a Python SDK that enables AI agents to communicate with each other using human-like messaging patterns. It supports synchronous and asynchronous conversations, one-way notifications, and multi-agent meetings with turn-based coordination.
@@ -88,7 +88,7 @@ echo "POSTGRES_PASSWORD=devpass" >> .env
 
 ```python
 import asyncio
-from agent_messaging import AgentMessaging
+from agent_messaging import AgentMessaging, register_one_way_handler, MessageContext
 from pydantic import BaseModel
 
 
@@ -96,17 +96,19 @@ class ChatMessage(BaseModel):
     text: str
 
 
+# Register global handler (applies to all agents)
+@register_one_way_handler
+async def message_handler(message: ChatMessage, context: MessageContext) -> None:
+    """Handle one-way messages for any agent."""
+    print(f"{context.receiver_id} received: {message.text}")
+
+
 async def main():
-    async with AgentMessaging[ChatMessage]() as sdk:
+    async with AgentMessaging[ChatMessage, dict, dict]() as sdk:
         # Register organization and agents
         await sdk.register_organization("my_org", "My Organization")
         await sdk.register_agent("alice", "my_org", "Alice")
         await sdk.register_agent("bob", "my_org", "Bob")
-        
-        # Register handler for bob
-        @sdk.register_one_way_handler("bob")
-        async def message_handler(message: ChatMessage, context):
-            print(f"Bob received: {message.text}")
         
         # Send message (one-to-many pattern)
         await sdk.one_way.send(
@@ -114,6 +116,9 @@ async def main():
             recipient_external_ids=["bob"],
             message=ChatMessage(text="Hello Bob!")
         )
+        
+        # Wait briefly for handler to process
+        await asyncio.sleep(0.1)
 
 
 if __name__ == "__main__":
@@ -124,6 +129,8 @@ if __name__ == "__main__":
 ```
 bob received: Hello Bob!
 ```
+
+**Note:** Handlers are registered globally and apply to all SDK instances. For details on the handler system and type safety, see [Handler Systems Architecture](docs/architecture/handler-systems.md).
 
 [See full Quick Start Guide →](docs/quick-start.md)
 
@@ -145,6 +152,8 @@ All planning documentation is complete and ready for implementation:
 ### User Guides
 
 - **[Quick Start](docs/quick-start.md)** - Get started in 5 minutes
+- **[Handler Systems Architecture](docs/architecture/handler-systems.md)** - Understanding the dual handler system
+- **[API Reference](docs/api-reference.md)** - Complete API documentation
 - **[psqlpy Guide](docs/technical/psqlpy-complete-guide.md)** - Database driver reference
 
 ---

@@ -5,16 +5,16 @@ Example 4: Multi-Agent Meeting - Brainstorming Session
 This example demonstrates multi-agent meetings with turn-based coordination.
 Agents take turns sharing ideas in a structured brainstorming session.
 
-Handlers are registered globally and process messages for ALL agents.
+This example showcases:
+- Meeting creation and lifecycle management
+- Turn-based messaging coordination
+- Event handlers for meeting lifecycle events
 """
 
 import asyncio
 import logging
-from agent_messaging import (
-    AgentMessaging,
-    register_meeting_handler,
-    MessageContext,
-)
+from agent_messaging import AgentMessaging
+from agent_messaging.models import MeetingEventType, MeetingEvent
 from pydantic import BaseModel
 
 # Configure logging
@@ -38,61 +38,36 @@ class MeetingSummary(BaseModel):
     key_insights: list[str]
 
 
-# Global SDK reference for use in handler
-_sdk: "AgentMessaging[dict, dict, IdeaMessage] | None" = None
+async def setup_event_handlers(sdk: "AgentMessaging[dict, dict, IdeaMessage]"):
+    """Set up event handlers for meeting lifecycle events."""
 
+    async def on_meeting_started(event: MeetingEvent):
+        """Called when a meeting starts."""
+        logger.info(
+            f"EVENT: Meeting {event.meeting_id} started with "
+            f"{len(event.data.participant_ids)} participants"
+        )
 
-# Register global meeting handler
-@register_meeting_handler
-async def handle_meeting(message: IdeaMessage, context: MessageContext) -> IdeaMessage:
-    """Global handler for meeting messages."""
-    recipient = context.receiver_id
-    logger.info(f"{recipient.capitalize()}: Received meeting message: {message}")
+    async def on_turn_changed(event: MeetingEvent):
+        """Called when the speaking turn changes."""
+        logger.info(
+            f"EVENT: Turn changed to {event.data.current_speaker_id} "
+            f"(previous: {event.data.previous_speaker_id})"
+        )
 
-    if _sdk is None:
-        return None  # type: ignore
+    async def on_participant_joined(event: MeetingEvent):
+        """Called when a participant joins the meeting."""
+        logger.info(f"EVENT: Participant {event.data.agent_external_id} joined meeting")
 
-    # Attend the meeting if not already attending
-    try:
-        await _sdk.meeting.attend_meeting(recipient, context.meeting_id)
-        logger.info(f"{recipient.capitalize()}: Joined meeting")
-    except Exception as e:
-        logger.debug(f"{recipient.capitalize()}: Already attending or error: {e}")
+    async def on_meeting_ended(event: MeetingEvent):
+        """Called when a meeting ends."""
+        logger.info(f"EVENT: Meeting {event.meeting_id} ended")
 
-    # If it's this agent's turn, share an idea
-    status = await _sdk.meeting.get_meeting_status(context.meeting_id)
-    if status.get("current_speaker_external_id") == recipient:
-        logger.info(f"{recipient.capitalize()}: It's my turn! Sharing idea...")
-
-        # Different ideas for each agent
-        if recipient == "alice":
-            idea = IdeaMessage(
-                speaker="alice",
-                idea="We should add a dark mode toggle to improve user experience.",
-                category="feature",
-            )
-        elif recipient == "bob":
-            idea = IdeaMessage(
-                speaker="bob",
-                idea="The API response times are too slow. We need to optimize database queries.",
-                category="improvement",
-            )
-        elif recipient == "charlie":
-            idea = IdeaMessage(
-                speaker="charlie",
-                idea="We should add comprehensive error logging to help with debugging.",
-                category="bug_fix",
-            )
-        else:
-            idea = IdeaMessage(
-                speaker=recipient,
-                idea="Great point, I agree with the previous speaker.",
-                category="general",
-            )
-
-        return idea
-
-    return None  # type: ignore
+    # Register event handlers
+    sdk._event_handler.register_handler(MeetingEventType.MEETING_STARTED, on_meeting_started)
+    sdk._event_handler.register_handler(MeetingEventType.TURN_CHANGED, on_turn_changed)
+    sdk._event_handler.register_handler(MeetingEventType.PARTICIPANT_JOINED, on_participant_joined)
+    sdk._event_handler.register_handler(MeetingEventType.MEETING_ENDED, on_meeting_ended)
 
 
 async def moderator_agent(sdk: "AgentMessaging[dict, dict, IdeaMessage]"):
@@ -120,15 +95,59 @@ async def moderator_agent(sdk: "AgentMessaging[dict, dict, IdeaMessage]"):
         next_speaker="alice",
     )
 
-    # Let the meeting run for a while
-    await asyncio.sleep(5)
+    logger.info("Moderator: Meeting started, participants can now speak")
+
+    # Let the meeting run for a while to allow events to fire
+    await asyncio.sleep(2)
+
+    # Simulate Alice speaking
+    logger.info("Alice: Sharing my idea...")
+    await sdk.meeting.send_message(
+        sender_external_id="alice",
+        meeting_id=meeting_id,
+        message=IdeaMessage(
+            speaker="alice",
+            idea="We should add a dark mode toggle to improve user experience.",
+            category="feature",
+        ),
+        next_speaker="bob",
+    )
+
+    await asyncio.sleep(1)
+
+    # Simulate Bob speaking
+    logger.info("Bob: Sharing my idea...")
+    await sdk.meeting.send_message(
+        sender_external_id="bob",
+        meeting_id=meeting_id,
+        message=IdeaMessage(
+            speaker="bob",
+            idea="The API response times are too slow. We need to optimize database queries.",
+            category="improvement",
+        ),
+        next_speaker="charlie",
+    )
+
+    await asyncio.sleep(1)
+
+    # Simulate Charlie speaking
+    logger.info("Charlie: Sharing my idea...")
+    await sdk.meeting.send_message(
+        sender_external_id="charlie",
+        meeting_id=meeting_id,
+        message=IdeaMessage(
+            speaker="charlie",
+            idea="We should add comprehensive error logging to help with debugging.",
+            category="bug_fix",
+        ),
+        next_speaker=None,  # No next speaker
+    )
+
+    await asyncio.sleep(1)
 
     # Check meeting status
     status = await sdk.meeting.get_meeting_status(meeting_id)
     logger.info(f"Moderator: Meeting status - {status['status']}")
-
-    # Let the meeting continue
-    await asyncio.sleep(5)
 
     # End the meeting
     logger.info("Moderator: Ending meeting")
@@ -138,15 +157,24 @@ async def moderator_agent(sdk: "AgentMessaging[dict, dict, IdeaMessage]"):
     history = await sdk.meeting.get_meeting_history(meeting_id)
     logger.info(f"Moderator: Meeting had {len(history)} messages")
 
+    # Summary of ideas shared
+    ideas_by_category = {}
+    for msg in history:
+        if "category" in msg["message"]:
+            category = msg["message"]["category"]
+            ideas_by_category[category] = ideas_by_category.get(category, 0) + 1
+
+    logger.info(f"Moderator: Ideas by category: {ideas_by_category}")
+
 
 async def main():
     """Run the brainstorming meeting example."""
-    global _sdk
     logger.info("Starting multi-agent meeting brainstorming example")
 
     # Use 3 type parameters: T_OneWay=dict, T_Conversation=dict, T_Meeting=IdeaMessage
     async with AgentMessaging[dict, dict, IdeaMessage]() as sdk:
-        _sdk = sdk
+        # Set up event handlers to monitor meeting lifecycle
+        await setup_event_handlers(sdk)
 
         # Register organization
         await sdk.register_organization("brainstorm_co", "Brainstorming Company")

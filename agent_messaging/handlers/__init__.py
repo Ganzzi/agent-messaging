@@ -8,7 +8,6 @@ Example:
     from agent_messaging.handlers import (
         register_one_way_handler,
         register_conversation_handler,
-        register_meeting_handler,
         MessageContext,
         HandlerContext,
     )
@@ -29,16 +28,13 @@ from .types import (
     # Handler protocols
     OneWayHandler,
     ConversationHandler,
-    MeetingHandler,
-    SystemHandler,
     AnyHandler,
 )
 from .registry import (
     # Registration decorators
     register_one_way_handler,
     register_conversation_handler,
-    register_meeting_handler,
-    register_system_handler,
+    register_message_notification_handler,
     # Lookup functions
     get_handler,
     has_handler,
@@ -64,14 +60,11 @@ __all__ = [
     # Handler protocols
     "OneWayHandler",
     "ConversationHandler",
-    "MeetingHandler",
-    "SystemHandler",
     "AnyHandler",
     # Registration decorators
     "register_one_way_handler",
     "register_conversation_handler",
-    "register_meeting_handler",
-    "register_system_handler",
+    "register_message_notification_handler",
     # Lookup functions
     "get_handler",
     "has_handler",

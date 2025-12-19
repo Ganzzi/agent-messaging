@@ -31,13 +31,10 @@ from .handlers import (
     # Handler protocols
     OneWayHandler,
     ConversationHandler,
-    MeetingHandler,
-    SystemHandler,
     # Registration decorators
     register_one_way_handler,
     register_conversation_handler,
-    register_meeting_handler,
-    register_system_handler,
+    register_message_notification_handler,
     # Lookup and management
     get_handler,
     has_handler,
@@ -71,13 +68,10 @@ __all__ = [
     "MessageContext",
     "OneWayHandler",
     "ConversationHandler",
-    "MeetingHandler",
-    "SystemHandler",
     # Handler registration
     "register_one_way_handler",
     "register_conversation_handler",
-    "register_meeting_handler",
-    "register_system_handler",
+    "register_message_notification_handler",
     # Handler management
     "get_handler",
     "has_handler",
