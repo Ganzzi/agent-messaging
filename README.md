@@ -5,7 +5,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/agent-messaging.svg)](https://pypi.org/project/agent-messaging/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: v0.4.0 Released](https://img.shields.io/badge/Status-v0.4.0%20Released-brightgreen.svg)]()
+[![Status: v0.5.0 Released](https://img.shields.io/badge/Status-v0.5.0%20Released-brightgreen.svg)]()
 [![Tests: 179/179 (100%)](https://img.shields.io/badge/Tests-179%2F179%20(100%25)-brightgreen.svg)]()
 
 **Agent Messaging Protocol** is a Python SDK that enables AI agents to communicate with each other using human-like messaging patterns. It supports synchronous and asynchronous conversations, one-way notifications, and multi-agent meetings with turn-based coordination.
@@ -26,7 +26,8 @@
 - ✅ **Type-Safe:** Generic message types with Pydantic validation
 - ✅ **High Performance:** PostgreSQL with psqlpy async driver
 - ✅ **Scalable:** Connection pooling and efficient database design
-- ✅ **Extensible:** Handler registration and event system
+- ✅ **Real-Time Events:** 11 event types for meeting lifecycle and messaging (v0.5.0)
+- ✅ **Extensible:** Handler registration and comprehensive event system
 - ✅ **Async Native:** Full async/await support with asyncio
 - ✅ **Production Ready:** Comprehensive error handling and timeout management
 

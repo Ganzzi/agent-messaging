@@ -1,7 +1,9 @@
 """Multi-agent meeting implementation with turn-based coordination."""
 
+import asyncio
 import logging
-from typing import Any, Dict, Generic, List, Optional
+from datetime import datetime
+from typing import Any, Dict, Generic, List, Optional, Tuple, Union
 from uuid import UUID
 
 from ..database.repositories.agent import AgentRepository
@@ -85,6 +87,35 @@ class MeetingManager(Generic[T_Meeting]):
             except (TypeError, ValueError):
                 # Wrap in dict if not convertible
                 return {"data": message}
+
+    async def _get_messages_since(
+        self,
+        meeting_id: UUID,
+        since_timestamp: datetime,
+    ) -> List[T_Meeting]:
+        """Get all messages in a meeting since a specific timestamp.
+
+        This is a helper method for wait_for_turn functionality.
+
+        Args:
+            meeting_id: Meeting UUID
+            since_timestamp: Timestamp to fetch messages from (exclusive)
+
+        Returns:
+            List of message contents (T_Meeting) from messages created after the timestamp
+        """
+        messages = await self._message_repo.get_messages_for_meeting(
+            meeting_id=meeting_id,
+            date_from=since_timestamp,
+            limit=1000,  # Reasonable limit for messages during a wait
+        )
+
+        # Extract the content (T_Meeting) from each message
+        result = []
+        for msg in messages:
+            result.append(msg.content)
+
+        return result
 
     async def create_meeting(
         self,
@@ -235,25 +266,44 @@ class MeetingManager(Generic[T_Meeting]):
         if not isinstance(status, ParticipantStatus):
             raise ValueError("status must be a valid ParticipantStatus enum value")
 
+        # Get current status before update
+        participant = await self._meeting_repo.get_participant(meeting_id, agent_id)
+        previous_status = participant.status.value if participant else None
+
+        # Update participant status
         await self._meeting_repo.update_participant_status(
             meeting_id=meeting_id,
             agent_id=agent_id,
             status=status,
         )
 
+        # Emit participant status changed event
+        if previous_status:
+            await self._event_handler.emit_participant_status_changed(
+                meeting_id=meeting_id,
+                agent_id=agent_id,
+                previous_status=previous_status,
+                current_status=status.value,
+            )
+
     async def attend_meeting(
         self,
         agent_external_id: str,
         meeting_id: UUID,
-    ) -> bool:
+        wait_for_turn: bool = False,
+    ) -> Union[bool, Tuple[bool, List[T_Meeting]]]:
         """Attend a meeting (mark agent as attending).
 
         Args:
             agent_external_id: External ID of the agent attending
             meeting_id: Meeting UUID
+            wait_for_turn: If True, blocks until it's the agent's turn and returns messages.
+                          If False, returns immediately after marking as attending (default).
 
         Returns:
-            True if successfully marked as attending
+            - If wait_for_turn=False: bool (True if successfully marked as attending)
+            - If wait_for_turn=True: Tuple[bool, List[T_Meeting]]
+              (success status, list of messages that occurred while waiting)
 
         Raises:
             ValueError: If parameters are invalid
@@ -297,24 +347,76 @@ class MeetingManager(Generic[T_Meeting]):
             )
 
         # Check if already attending
-        if participant.status == ParticipantStatus.ATTENDING:
+        was_already_attending = participant.status == ParticipantStatus.ATTENDING
+
+        if not was_already_attending:
+            # Update status to attending
+            await self._meeting_repo.update_participant_status(
+                participant_id=participant.id,
+                status=ParticipantStatus.ATTENDING,
+            )
+
+            # Emit participant joined event
+            await self._event_handler.emit_participant_joined(
+                meeting_id=meeting_id,
+                agent_id=agent.id,
+            )
+
+            logger.info(f"Agent {agent_external_id} is now attending meeting {meeting_id}")
+
+        # If wait_for_turn is False, return immediately with simple boolean
+        if not wait_for_turn:
             return True
 
-        # Update status to attending
-        await self._meeting_repo.update_participant_status(
-            participant_id=participant.id,
-            status=ParticipantStatus.ATTENDING,
-        )
+        # If wait_for_turn is True, wait until it's the agent's turn
+        logger.info(f"Agent {agent_external_id} waiting for turn in meeting {meeting_id}")
 
-        # Emit participant joined event
-        await self._event_handler.emit_participant_joined(
-            meeting_id=meeting_id,
-            agent_id=agent.id,
-        )
+        # Record the timestamp when we start waiting
+        start_timestamp = datetime.utcnow()
 
-        logger.info(f"Agent {agent_external_id} is now attending meeting {meeting_id}")
+        # Create an agent-specific lock (agent can only attend one meeting at a time with lock)
+        agent_lock = SessionLock(f"agent_{agent.id}_meeting_{meeting_id}")
 
-        return True
+        # Acquire lock and wait for turn
+        async with self._message_repo.db_manager.connection() as connection:
+            lock_acquired = await agent_lock.acquire(connection)
+            if not lock_acquired:
+                raise MeetingError(
+                    f"Agent {agent_external_id} is already locked in another operation"
+                )
+
+            try:
+                # Wait until it's this agent's turn
+                while True:
+                    # Re-fetch meeting state
+                    meeting = await self._meeting_repo.get_by_id(meeting_id)
+                    if not meeting:
+                        raise MeetingError(f"Meeting {meeting_id} no longer exists")
+
+                    # Check if meeting ended while waiting
+                    if meeting.status == MeetingStatus.ENDED:
+                        logger.info(
+                            f"Meeting {meeting_id} ended while agent {agent_external_id} was waiting"
+                        )
+                        # Fetch messages that occurred while waiting
+                        messages = await self._get_messages_since(meeting_id, start_timestamp)
+                        return (True, messages)
+
+                    # Check if it's this agent's turn
+                    if meeting.current_speaker_id == agent.id:
+                        logger.info(
+                            f"Agent {agent_external_id}'s turn arrived in meeting {meeting_id}"
+                        )
+                        # Fetch messages that occurred while waiting
+                        messages = await self._get_messages_since(meeting_id, start_timestamp)
+                        return (True, messages)
+
+                    # Small delay before checking again (prevent busy loop)
+                    await asyncio.sleep(0.5)
+
+            finally:
+                # Always release lock
+                await agent_lock.release(connection)
 
     async def start_meeting(
         self,
@@ -431,7 +533,8 @@ class MeetingManager(Generic[T_Meeting]):
         meeting_id: UUID,
         message: T_Meeting,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> UUID:
+        wait_for_turn: bool = False,
+    ) -> Union[UUID, Tuple[UUID, List[T_Meeting]]]:
         """Speak in a meeting (requires having the turn).
 
         Args:
@@ -439,16 +542,21 @@ class MeetingManager(Generic[T_Meeting]):
             meeting_id: Meeting UUID
             message: Message content to speak (T_Meeting type)
             metadata: Optional custom metadata to attach (for tracking, filtering, etc.)
+            wait_for_turn: If True, blocks until it's the agent's turn, then speaks and returns
+                          messages that occurred while waiting. If False, raises NotYourTurnError
+                          immediately if not the agent's turn (default).
 
         Returns:
-            Message ID of the spoken message
+            - If wait_for_turn=False: UUID (message ID, or raises NotYourTurnError)
+            - If wait_for_turn=True: Tuple[UUID, List[T_Meeting]]
+              (message_id, list of messages that occurred while waiting)
 
         Raises:
             ValueError: If parameters are invalid
             AgentNotFoundError: If agent not found
             MeetingError: If meeting not found or agent not a participant
             MeetingNotActiveError: If meeting is not active
-            NotYourTurnError: If it's not the agent's turn
+            NotYourTurnError: If it's not the agent's turn (only when wait_for_turn=False)
         """
         # Input validation
         if not agent_external_id or not isinstance(agent_external_id, str):
@@ -465,6 +573,59 @@ class MeetingManager(Generic[T_Meeting]):
         if not agent:
             raise AgentNotFoundError(f"Agent '{agent_external_id}' not found")
 
+        # If wait_for_turn is True, wait until it's the agent's turn
+        start_timestamp = datetime.utcnow() if wait_for_turn else None
+
+        if wait_for_turn:
+            logger.info(
+                f"Agent {agent_external_id} waiting for turn to speak in meeting {meeting_id}"
+            )
+
+            # Create an agent-specific lock for waiting
+            agent_lock = SessionLock(f"agent_{agent.id}_speaking_{meeting_id}")
+
+            async with self._message_repo.db_manager.connection() as connection:
+                lock_acquired = await agent_lock.acquire(connection)
+                if not lock_acquired:
+                    raise MeetingError(
+                        f"Agent {agent_external_id} is already locked in another operation"
+                    )
+
+                try:
+                    # Wait until it's this agent's turn
+                    while True:
+                        # Re-fetch meeting state
+                        meeting = await self._meeting_repo.get_by_id(meeting_id)
+                        if not meeting:
+                            raise MeetingError(f"Meeting {meeting_id} no longer exists")
+
+                        # Check if meeting ended while waiting
+                        if meeting.status == MeetingStatus.ENDED:
+                            raise MeetingNotActiveError(
+                                f"Meeting {meeting_id} ended while waiting for turn"
+                            )
+
+                        # Check if meeting is active
+                        if meeting.status != MeetingStatus.ACTIVE:
+                            # Wait for meeting to become active
+                            await asyncio.sleep(0.5)
+                            continue
+
+                        # Check if it's this agent's turn
+                        if meeting.current_speaker_id == agent.id:
+                            logger.info(
+                                f"Agent {agent_external_id}'s turn to speak arrived in meeting {meeting_id}"
+                            )
+                            break
+
+                        # Small delay before checking again (prevent busy loop)
+                        await asyncio.sleep(0.5)
+
+                finally:
+                    # Release the waiting lock
+                    await agent_lock.release(connection)
+
+        # Now speak (either immediately or after waiting)
         # CRITICAL FIX: Use per-meeting lock to prevent concurrent speakers
         # Create lock using meeting_id as the lock key
         meeting_lock = SessionLock(meeting_id)
@@ -511,6 +672,14 @@ class MeetingManager(Generic[T_Meeting]):
                     message_type=MessageType.USER_DEFINED,
                     content=message_content,
                     metadata=metadata or {},
+                )
+
+                # Emit message posted event
+                await self._event_handler.emit_message_posted(
+                    meeting_id=meeting_id,
+                    message_id=message_id,
+                    sender_id=agent.id,
+                    content=message_content,
                 )
 
                 # Get all participants for round-robin selection
@@ -561,7 +730,12 @@ class MeetingManager(Generic[T_Meeting]):
                     f"Next speaker: agent {next_speaker.agent_id}"
                 )
 
-                return message_id
+                # If wait_for_turn was True, fetch and return messages since waiting started
+                if wait_for_turn and start_timestamp:
+                    messages = await self._get_messages_since(meeting_id, start_timestamp)
+                    return (message_id, messages)
+                else:
+                    return message_id
 
             finally:
                 # Always release lock on same connection
@@ -937,163 +1111,3 @@ class MeetingManager(Generic[T_Meeting]):
             "attending_count": details["attending_count"],
             "message_count": details["message_count"],
         }
-
-    async def get_participant_history(
-        self,
-        meeting_id: str,
-    ) -> List[Dict[str, Any]]:
-        """Get full participant history for a meeting.
-
-        Args:
-            meeting_id: Meeting ID (UUID as string)
-
-        Returns:
-            List of participants with detailed information
-        """
-        try:
-            meeting_uuid = UUID(meeting_id) if isinstance(meeting_id, str) else meeting_id
-        except (ValueError, TypeError):
-            raise ValueError(f"meeting_id is not a valid UUID: {meeting_id}")
-
-        participants = await self._meeting_repo.get_participant_history(meeting_uuid)
-
-        result = []
-        for p in participants:
-            result.append(
-                {
-                    "participant_id": str(p["id"]),
-                    "agent_id": str(p["agent_id"]),
-                    "agent_name": p["agent_name"],
-                    "status": p["status"],
-                    "join_order": p["join_order"],
-                    "is_locked": p["is_locked"],
-                    "joined_at": p["joined_at"],
-                    "left_at": p["left_at"],
-                }
-            )
-
-        return result
-
-    async def get_meeting_statistics(
-        self,
-        agent_id: str,
-    ) -> Dict[str, Any]:
-        """Get meeting statistics for an agent (as organizer or participant).
-
-        Args:
-            agent_id: Agent external ID
-
-        Returns:
-            Dictionary with meeting statistics
-        """
-        agent = await self._agent_repo.get_by_external_id(agent_id)
-        if not agent:
-            raise AgentNotFoundError(f"Agent not found: {agent_id}")
-
-        stats = await self._meeting_repo.get_meeting_statistics(agent.id)
-
-        return {
-            "agent_id": agent_id,
-            "hosted_meetings": stats["hosted_meetings"],
-            "participated_meetings": stats["participated_meetings"],
-            "active_hosted": stats["active_hosted"],
-            "total_messages_sent": stats["total_messages_sent"],
-            "meetings_spoke_in": stats["meetings_spoke_in"],
-            "avg_meeting_duration_seconds": stats["avg_meeting_duration_seconds"],
-        }
-
-    async def get_participation_analysis(
-        self,
-        meeting_id: str,
-    ) -> Dict[str, Any]:
-        """Get detailed participation analysis for a meeting.
-
-        Provides insights into each participant's activity levels, speaking patterns,
-        and engagement metrics.
-
-        Args:
-            meeting_id: Meeting ID (UUID as string)
-
-        Returns:
-            Dictionary with participation analysis including:
-                - total_participants: Total number of participants
-                - active_participants: Number who sent messages
-                - participation_rate: Percentage of active participants
-                - by_participant: Individual participant statistics
-                - most_active: Most active participant
-                - least_active: Least active participant (among active)
-
-        Raises:
-            ValueError: If meeting_id is invalid or meeting not found
-        """
-        try:
-            meeting_uuid = UUID(meeting_id) if isinstance(meeting_id, str) else meeting_id
-        except (ValueError, TypeError):
-            raise ValueError(f"meeting_id is not a valid UUID: {meeting_id}")
-
-        analysis = await self._meeting_repo.get_participation_analysis(meeting_uuid)
-
-        return analysis
-
-    async def get_meeting_timeline(
-        self,
-        meeting_id: str,
-    ) -> Dict[str, Any]:
-        """Get chronological timeline of all meeting events.
-
-        Returns a complete timeline of messages and meeting events in chronological
-        order, useful for replaying or analyzing meeting flow.
-
-        Args:
-            meeting_id: Meeting ID (UUID as string)
-
-        Returns:
-            Dictionary with timeline information including:
-                - meeting_id: Meeting UUID
-                - started_at: Meeting start timestamp
-                - ended_at: Meeting end timestamp (if ended)
-                - duration_seconds: Total duration (if ended)
-                - timeline: Chronologically ordered list of events
-
-        Raises:
-            ValueError: If meeting_id is invalid
-        """
-        try:
-            meeting_uuid = UUID(meeting_id) if isinstance(meeting_id, str) else meeting_id
-        except (ValueError, TypeError):
-            raise ValueError(f"meeting_id is not a valid UUID: {meeting_id}")
-
-        timeline = await self._meeting_repo.get_meeting_timeline(meeting_uuid)
-
-        return timeline
-
-    async def get_turn_statistics(
-        self,
-        meeting_id: str,
-    ) -> Dict[str, Any]:
-        """Get turn-taking statistics for a meeting.
-
-        Analyzes turn patterns, speaking order adherence, and individual
-        participant turn-taking behavior.
-
-        Args:
-            meeting_id: Meeting ID (UUID as string)
-
-        Returns:
-            Dictionary with turn statistics including:
-                - total_turns: Total number of speaking turns
-                - avg_messages_per_turn: Average messages per turn
-                - turn_changes: Number of speaker changes
-                - participants_turn_stats: Per-participant turn statistics
-
-        Raises:
-            ValueError: If meeting_id is invalid
-        """
-        try:
-            meeting_uuid = UUID(meeting_id) if isinstance(meeting_id, str) else meeting_id
-        except (ValueError, TypeError):
-            raise ValueError(f"meeting_id is not a valid UUID: {meeting_id}")
-
-        stats = await self._meeting_repo.get_turn_statistics(meeting_uuid)
-
-        return stats

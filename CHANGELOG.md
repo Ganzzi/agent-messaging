@@ -5,6 +5,97 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-12-19
+
+### Added
+- **Enhanced Event System for Real-Time Messaging**
+  - Added 3 new event types for comprehensive real-time coverage:
+    - `MESSAGE_POSTED` - Emitted when an agent posts a message in a meeting
+    - `PARTICIPANT_STATUS_CHANGED` - Emitted when a participant's status changes
+    - `ERROR_OCCURRED` - Emitted when an error occurs during a meeting
+  - Added 3 new type-safe event data models:
+    - `MessagePostedEventData` - Contains message_id, sender_id, content, timestamp
+    - `ParticipantStatusChangedEventData` - Contains agent_id, previous_status, current_status
+    - `ErrorOccurredEventData` - Contains error_type, error_message, optional affected_agent_id, timestamp
+
+- **New Event Handler Methods**
+  - `emit_message_posted()` - Automatically emitted in MeetingManager.speak()
+  - `emit_participant_status_changed()` - Automatically emitted in MeetingManager.update_participant_status()
+  - `emit_error_occurred()` - Available for error handling scenarios
+
+- **Event Emissions in Meeting Operations**
+  - `MESSAGE_POSTED` event automatically emitted when agents speak
+  - `PARTICIPANT_STATUS_CHANGED` event automatically emitted when participant status updates
+  - Events are type-safe and include all relevant context
+
+- **Event System Documentation**
+  - Added comprehensive real-time messaging event examples in API reference
+  - Added turn-based meeting control event examples
+  - Documented all 9 event types with use cases and emission points
+  - Updated event data models documentation
+
+### Changed
+- **MeetingEventType Enum** - Now supports 9 event types (was 6)
+  - Added MESSAGE_POSTED and ERROR_OCCURRED to existing 6 events
+  - Kept PARTICIPANT_STATUS_CHANGED for presence tracking
+  - Removed MEETING_PAUSED and MEETING_RESUMED (no pause/resume functionality)
+  - Reorganized enum with logical grouping: lifecycle, participants, turn-based, messaging, errors
+
+- **Event Documentation** - Reorganized for clarity and accuracy
+  - Core meeting lifecycle events (started, ended)
+  - Participant-related events (joined, left, status changed)
+  - Turn-based events (turn changed, timeout)
+  - Real-time messaging section with MESSAGE_POSTED examples
+  - Error handling section for ERROR_OCCURRED
+
+- **MeetingManager Methods** - Enhanced with automatic event emissions
+  - `speak()` now emits MESSAGE_POSTED after message creation
+  - `update_participant_status()` now emits PARTICIPANT_STATUS_CHANGED
+
+### Removed
+- Removed `MEETING_PAUSED` and `MEETING_RESUMED` event types (no pause/resume functionality exists)
+- Removed `MeetingPausedEventData` and `MeetingResumedEventData` models
+- Removed `emit_meeting_paused()` and `emit_meeting_resumed()` methods
+
+### Documentation
+- **API Reference Updates** (~80 updated lines)
+  - Updated event type list with 9 events instead of 11
+  - Replaced pause/resume examples with turn-based meeting event examples
+  - Updated event data models documentation section
+  - Added clarification on automatic event emissions during operations
+  - Real-time messaging event examples
+  - Meeting control event examples
+  - Updated event data models section
+  - All 11 event types documented with descriptions
+
+### Testing
+- **Syntax Validation**: All new code passes import validation
+- **Type Safety**: All new event data models pass Pydantic validation
+
+### Event System Summary
+
+The Agent Messaging Protocol now supports 11 comprehensive meeting events:
+
+| Event | Purpose | Use Case |
+|-------|---------|----------|
+| MEETING_STARTED | Meeting begins | Notify participants |
+| MEETING_ENDED | Meeting concludes | Cleanup, archival |
+| MEETING_PAUSED | Meeting paused | Temporary halt |
+| MEETING_RESUMED | Meeting resumes | Continue discussion |
+| PARTICIPANT_JOINED | Agent joins | Track attendance |
+| PARTICIPANT_LEFT | Agent leaves | Update participant list |
+| PARTICIPANT_STATUS_CHANGED | Status changes | Presence tracking |
+| TURN_CHANGED | Speaking turn changes | Update speaker indicator |
+| TIMEOUT_OCCURRED | Speaker timeout | Auto-advance turn |
+| MESSAGE_POSTED | Message posted | Real-time messaging |
+| ERROR_OCCURRED | Error occurs | Error handling |
+
+### Migration Notes
+
+No breaking changes. All new event types are additive and backward compatible.
+
+---
+
 ## [0.4.0] - 2025-12-19
 
 ### Removed

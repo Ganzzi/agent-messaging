@@ -62,12 +62,24 @@ class ParticipantStatus(str, Enum):
 class MeetingEventType(str, Enum):
     """Types of meeting events."""
 
+    # Core meeting lifecycle
     MEETING_STARTED = "meeting_started"
     MEETING_ENDED = "meeting_ended"
-    TURN_CHANGED = "turn_changed"
+
+    # Participant events
     PARTICIPANT_JOINED = "participant_joined"
     PARTICIPANT_LEFT = "participant_left"
+    PARTICIPANT_STATUS_CHANGED = "participant_status_changed"
+
+    # Turn-based events
+    TURN_CHANGED = "turn_changed"
     TIMEOUT_OCCURRED = "timeout_occurred"
+
+    # Real-time messaging events
+    MESSAGE_POSTED = "message_posted"
+
+    # Error events
+    ERROR_OCCURRED = "error_occurred"
 
 
 # ============================================================================
@@ -204,6 +216,32 @@ class TimeoutOccurredEventData(BaseModel):
 
     timed_out_agent_id: UUID
     next_speaker_id: UUID
+
+
+class MessagePostedEventData(BaseModel):
+    """Data for message posted event."""
+
+    message_id: UUID
+    sender_id: UUID
+    content: Dict[str, Any]
+    timestamp: datetime
+
+
+class ParticipantStatusChangedEventData(BaseModel):
+    """Data for participant status changed event."""
+
+    agent_id: UUID
+    previous_status: str
+    current_status: str
+
+
+class ErrorOccurredEventData(BaseModel):
+    """Data for error occurred event."""
+
+    error_type: str
+    error_message: str
+    affected_agent_id: Optional[UUID] = None
+    timestamp: datetime
 
 
 class MeetingEventPayload(BaseModel):

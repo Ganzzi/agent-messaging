@@ -719,17 +719,27 @@ async def update_participant_status(
 
 async def attend_meeting(
     agent_external_id: str,
-    meeting_id: UUID
-) -> bool:
+    meeting_id: UUID,
+    wait_for_turn: bool = False
+) -> Union[bool, Tuple[bool, List[Dict[str, Any]]]]:
     """
     Mark agent as attending meeting.
     
     Args:
         agent_external_id: Agent's external ID
         meeting_id: Meeting UUID
+        wait_for_turn: If True, blocks until it's the agent's turn and returns messages.
+                      If False, returns immediately after marking as attending (default).
     
     Returns:
-        True if joined successfully
+        - If wait_for_turn=False: bool (True if successfully marked as attending)
+        - If wait_for_turn=True: Tuple[bool, List[Dict[str, Any]]]
+          (success status, list of messages that occurred while waiting)
+    
+    Raises:
+        AgentNotFoundError: If agent not found
+        MeetingError: If meeting not found or agent not invited
+        MeetingStateError: If meeting is in an invalid state
     """
 
 async def start_meeting(
@@ -754,8 +764,9 @@ async def speak(
     agent_external_id: str,
     meeting_id: UUID,
     message: T,
-    metadata: Optional[Dict[str, Any]] = None
-) -> UUID:
+    metadata: Optional[Dict[str, Any]] = None,
+    wait_for_turn: bool = False
+) -> Union[UUID, Tuple[UUID, List[Dict[str, Any]]]]:
     """
     Speak in meeting during your turn.
     
@@ -766,13 +777,20 @@ async def speak(
         meeting_id: Meeting UUID
         message: Message payload
         metadata: Optional custom metadata
+        wait_for_turn: If True, blocks until it's the agent's turn, then speaks and returns
+                      messages that occurred while waiting. If False, raises NotYourTurnError
+                      immediately if not the agent's turn (default).
     
     Returns:
-        UUID of message
+        - If wait_for_turn=False: UUID (message ID, or raises NotYourTurnError)
+        - If wait_for_turn=True: Tuple[UUID, List[Dict[str, Any]]]
+          (message_id, list of messages that occurred while waiting)
     
     Raises:
-        NotYourTurnError: If agent doesn't have the turn
+        NotYourTurnError: If agent doesn't have the turn (only when wait_for_turn=False)
         MeetingNotActiveError: If meeting not active
+        AgentNotFoundError: If agent not found
+        MeetingError: If meeting not found or agent not a participant
     """
 
 async def end_meeting(
@@ -835,67 +853,6 @@ async def get_meeting_details(meeting_id: str) -> Dict[str, Any]:
     
     Returns:
         Detailed meeting information
-    """
-
-async def get_participant_history(meeting_id: str) -> List[Dict[str, Any]]:
-    """
-    Get full participant history.
-    
-    Args:
-        meeting_id: Meeting UUID as string
-    
-    Returns:
-        List of all participants with join/leave times and status
-    """
-
-async def get_meeting_statistics(agent_id: str) -> Dict[str, Any]:
-    """
-    Get meeting statistics for an agent.
-    
-    Args:
-        agent_id: Agent UUID or external ID
-    
-    Returns:
-        Aggregate statistics for agent's meetings
-    """
-
-async def get_participation_analysis(meeting_id: str) -> Dict[str, Any]:
-    """
-    Get detailed participation analysis.
-    
-    Includes speaking time, message counts, participation rates per agent.
-    
-    Args:
-        meeting_id: Meeting UUID as string
-    
-    Returns:
-        Per-agent participation metrics
-    """
-
-async def get_meeting_timeline(meeting_id: str) -> Dict[str, Any]:
-    """
-    Get complete meeting timeline.
-    
-    Chronological view of all events and messages.
-    
-    Args:
-        meeting_id: Meeting UUID as string
-    
-    Returns:
-        Timeline with timestamps for all events
-    """
-
-async def get_turn_statistics(meeting_id: str) -> Dict[str, Any]:
-    """
-    Get turn-taking analysis.
-    
-    Turn counts, order, duration per agent.
-    
-    Args:
-        meeting_id: Meeting UUID as string
-    
-    Returns:
-        Per-agent turn statistics
     """
 ```
 
@@ -1028,12 +985,24 @@ Event handlers react to meeting lifecycle events. They are registered per-SDK-in
 ```python
 from agent_messaging.models import MeetingEventType, MeetingEvent
 
+# Core meeting lifecycle
 MeetingEventType.MEETING_STARTED       # Meeting begins
 MeetingEventType.MEETING_ENDED         # Meeting ends
-MeetingEventType.TURN_CHANGED          # Speaking turn changes
+
+# Participant events
 MeetingEventType.PARTICIPANT_JOINED    # Agent joins meeting
 MeetingEventType.PARTICIPANT_LEFT      # Agent leaves meeting
+MeetingEventType.PARTICIPANT_STATUS_CHANGED  # Participant status changes (v0.5.0)
+
+# Turn-based events
+MeetingEventType.TURN_CHANGED          # Speaking turn changes
 MeetingEventType.TIMEOUT_OCCURRED      # Speaker timeout
+
+# Real-time messaging events (v0.5.0)
+MeetingEventType.MESSAGE_POSTED        # Message posted in meeting
+
+# Error events (v0.5.0)
+MeetingEventType.ERROR_OCCURRED        # Error occurred during meeting
 ```
 
 #### Registration Example
@@ -1056,6 +1025,84 @@ async with AgentMessaging() as sdk:
     meeting_id = await sdk.meeting.create_meeting("alice", ["bob"])
     await sdk.meeting.start_meeting("alice", meeting_id)
     # → Triggers on_meeting_started event
+```
+
+#### Real-Time Messaging Event Examples
+
+```python
+from agent_messaging.models import (
+    MeetingEventType,
+    MessagePostedEventData,
+    ParticipantStatusChangedEventData,
+    ErrorOccurredEventData,
+)
+
+async with AgentMessaging() as sdk:
+    # Monitor messages posted in real-time
+    async def on_message_posted(event):
+        data: MessagePostedEventData = event.data
+        print(f"Message from {data.sender_id}: {data.content}")
+    
+    # Track participant status changes
+    async def on_status_changed(event):
+        data: ParticipantStatusChangedEventData = event.data
+        print(f"Agent {data.agent_id}: {data.previous_status} → {data.current_status}")
+    
+    # Handle errors
+    async def on_error(event):
+        data: ErrorOccurredEventData = event.data
+        print(f"Error: {data.error_type} - {data.error_message}")
+    
+    # Register handlers
+    sdk._event_handler.register_handler(
+        MeetingEventType.MESSAGE_POSTED,
+        on_message_posted
+    )
+    sdk._event_handler.register_handler(
+        MeetingEventType.PARTICIPANT_STATUS_CHANGED,
+        on_status_changed
+    )
+    sdk._event_handler.register_handler(
+        MeetingEventType.ERROR_OCCURRED,
+        on_error
+    )
+    
+    # Use the SDK - events will be triggered automatically
+    meeting_id = await sdk.meeting.create_meeting("alice", ["bob", "carol"])
+    await sdk.meeting.start_meeting("alice", meeting_id)
+    
+    await sdk.meeting.speak("alice", meeting_id, "Hello team!")
+    # → Triggers MESSAGE_POSTED event
+```
+
+#### Meeting Control Event Examples
+
+```python
+from agent_messaging.models import (
+    MeetingEventType,
+    TurnChangedEventData,
+    TimeoutOccurredEventData,
+)
+
+async with AgentMessaging() as sdk:
+    # Handle turn-based meeting events
+    async def on_turn_changed(event):
+        data: TurnChangedEventData = event.data
+        print(f"Turn changed: {data.previous_speaker_id} -> {data.current_speaker_id}")
+    
+    async def on_timeout(event):
+        data: TimeoutOccurredEventData = event.data
+        print(f"Agent {data.timed_out_agent_id} timed out")
+        print(f"Next speaker: {data.next_speaker_id}")
+    
+    sdk._event_handler.register_handler(
+        MeetingEventType.TURN_CHANGED,
+        on_turn_changed
+    )
+    sdk._event_handler.register_handler(
+        MeetingEventType.TIMEOUT_OCCURRED,
+        on_timeout
+    )
 ```
 
 ### Handler Type Safety
@@ -1253,21 +1300,55 @@ class MessageType(str, Enum):
 ### Meeting Event Models
 
 ```python
-from agent_messaging import MeetingEventType, MeetingEventPayload
+from agent_messaging.models import (
+    MeetingEventType,
+    MeetingEventPayload,
+    MessagePostedEventData,
+    ParticipantStatusChangedEventData,
+    MeetingPausedEventData,
+    MeetingResumedEventData,
+    ErrorOccurredEventData,
+)
 
 class MeetingEventType(str, Enum):
+    # Core meeting lifecycle
     MEETING_STARTED = "meeting_started"
     MEETING_ENDED = "meeting_ended"
-    TURN_CHANGED = "turn_changed"
+    MEETING_PAUSED = "meeting_paused"              # v0.5.0
+    MEETING_RESUMED = "meeting_resumed"            # v0.5.0
+    
+    # Participant events
     PARTICIPANT_JOINED = "participant_joined"
     PARTICIPANT_LEFT = "participant_left"
+    PARTICIPANT_STATUS_CHANGED = "participant_status_changed"  # v0.5.0
+    
+    # Turn-based events
+    TURN_CHANGED = "turn_changed"
     TIMEOUT_OCCURRED = "timeout_occurred"
+    
+    # Real-time messaging
+    MESSAGE_POSTED = "message_posted"              # v0.5.0
+    
+    # Error events
+    ERROR_OCCURRED = "error_occurred"              # v0.5.0
 
-class MeetingEventPayload:
-    meeting_id: UUID
-    event_type: MeetingEventType
-    timestamp: datetime
-    data: Dict[str, Any]             # Event-specific data
+# Event Data Models (v0.5.0+)
+class MessagePostedEventData:
+    message_id: UUID                 # Message UUID
+    sender_id: UUID                  # Sender agent UUID
+    content: Dict[str, Any]          # Message content
+    timestamp: datetime              # When posted
+
+class ParticipantStatusChangedEventData:
+    agent_id: UUID                   # Agent whose status changed
+    previous_status: str             # Previous status
+    current_status: str              # New status
+
+class ErrorOccurredEventData:
+    error_type: str                  # Type of error
+    error_message: str               # Error message
+    affected_agent_id: Optional[UUID] # Agent affected (if applicable)
+    timestamp: datetime              # When error occurred
 ```
 
 ---

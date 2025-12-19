@@ -68,6 +68,9 @@ def mock_event_handler():
     handler.emit_turn_changed = AsyncMock()
     handler.emit_meeting_ended = AsyncMock()
     handler.emit_participant_left = AsyncMock()
+    handler.emit_message_posted = AsyncMock()
+    handler.emit_participant_status_changed = AsyncMock()
+    handler.emit_error_occurred = AsyncMock()
     return handler
 
 

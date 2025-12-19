@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 from uuid import UUID
 
 from ..models import (
@@ -14,6 +14,9 @@ from ..models import (
     ParticipantJoinedEventData,
     ParticipantLeftEventData,
     TimeoutOccurredEventData,
+    MessagePostedEventData,
+    ParticipantStatusChangedEventData,
+    ErrorOccurredEventData,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,6 +29,9 @@ MeetingEventData = Union[
     ParticipantJoinedEventData,
     ParticipantLeftEventData,
     TimeoutOccurredEventData,
+    MessagePostedEventData,
+    ParticipantStatusChangedEventData,
+    ErrorOccurredEventData,
 ]
 
 
@@ -227,5 +233,64 @@ class MeetingEventHandler:
         await self.emit_event(
             meeting_id=meeting_id,
             event_type=MeetingEventType.TIMEOUT_OCCURRED,
+            data=data,
+        )
+
+    async def emit_message_posted(
+        self,
+        meeting_id: UUID,
+        message_id: UUID,
+        sender_id: UUID,
+        content: Dict[str, Any],
+    ) -> None:
+        """Emit message posted event with type-safe data."""
+        data = MessagePostedEventData(
+            message_id=message_id,
+            sender_id=sender_id,
+            content=content,
+            timestamp=datetime.now(),
+        )
+        await self.emit_event(
+            meeting_id=meeting_id,
+            event_type=MeetingEventType.MESSAGE_POSTED,
+            data=data,
+        )
+
+    async def emit_participant_status_changed(
+        self,
+        meeting_id: UUID,
+        agent_id: UUID,
+        previous_status: str,
+        current_status: str,
+    ) -> None:
+        """Emit participant status changed event with type-safe data."""
+        data = ParticipantStatusChangedEventData(
+            agent_id=agent_id,
+            previous_status=previous_status,
+            current_status=current_status,
+        )
+        await self.emit_event(
+            meeting_id=meeting_id,
+            event_type=MeetingEventType.PARTICIPANT_STATUS_CHANGED,
+            data=data,
+        )
+
+    async def emit_error_occurred(
+        self,
+        meeting_id: UUID,
+        error_type: str,
+        error_message: str,
+        affected_agent_id: Optional[UUID] = None,
+    ) -> None:
+        """Emit error occurred event with type-safe data."""
+        data = ErrorOccurredEventData(
+            error_type=error_type,
+            error_message=error_message,
+            affected_agent_id=affected_agent_id,
+            timestamp=datetime.now(),
+        )
+        await self.emit_event(
+            meeting_id=meeting_id,
+            event_type=MeetingEventType.ERROR_OCCURRED,
             data=data,
         )
