@@ -8,6 +8,7 @@ from uuid import uuid4
 from agent_messaging.messaging.conversation import Conversation
 from agent_messaging.models import (
     Agent,
+    ConversationResult,
     Message,
     MessageType,
     Organization,
@@ -219,7 +220,7 @@ class TestConversation:
         mock_message_repo,
         mock_invoke_handler_async,
     ):
-        """Test send_and_wait with timeout."""
+        """Test send_and_wait with timeout returns ConversationResult with status=timeout."""
 
         # Register a handler so has_handler() returns True
         @register_conversation_handler
@@ -257,12 +258,15 @@ class TestConversation:
             ended_at=None,
         )
 
+        message_id = uuid4()
+        system_message_id = uuid4()
+
         mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[sender, recipient])
         mock_session_repo.get_active_session = AsyncMock(return_value=None)
         mock_session_repo.create = AsyncMock(return_value=session_id)
         mock_session_repo.get_by_id = AsyncMock(return_value=session)
         mock_session_repo.set_locked_agent = AsyncMock()
-        mock_message_repo.create = AsyncMock(return_value=uuid4())
+        mock_message_repo.create = AsyncMock(side_effect=[message_id, system_message_id])
 
         # Mock the connection context manager
         mock_connection = AsyncMock()
@@ -277,9 +281,206 @@ class TestConversation:
             mock_session_lock.acquire = AsyncMock(return_value=True)
             mock_session_lock_class.return_value = mock_session_lock
 
-            # Send and wait (should timeout since no response is set)
-            with pytest.raises(TimeoutError, match="No response received within 1.0 seconds"):
-                await conversation.send_and_wait("alice", "bob", {"text": "Hello!"}, timeout=1.0)
+            # Send and wait (should timeout and return ConversationResult)
+            result = await conversation.send_and_wait("alice", "bob", {"text": "Hello!"}, timeout=1.0)
+
+            # Verify result is ConversationResult with status=timeout
+            assert isinstance(result, ConversationResult)
+            assert result.status == "timeout"
+            assert result.message is None
+            assert result.timeout_seconds == 1.0
+            assert result.original_message_id == message_id
+
+            # Verify system message was sent
+            assert mock_message_repo.create.call_count >= 2  # Original message + system message
+            # Check the second call (system message)
+            second_call = mock_message_repo.create.call_args_list[1]
+            assert second_call[1]["message_type"] == MessageType.SYSTEM
+            assert "[System]" in str(second_call[1]["content"])
+            assert "did not respond" in str(second_call[1]["content"]).lower()
+
+    @pytest.mark.asyncio
+    async def test_send_and_wait_timeout_system_message_sent(
+        self,
+        conversation,
+        mock_agent_repo,
+        mock_session_repo,
+        mock_message_repo,
+        mock_invoke_handler_async,
+    ):
+        """Test that system message explaining timeout is sent to conversation."""
+
+        # Register a handler so has_handler() returns True
+        @register_conversation_handler
+        async def test_handler(message, context):
+            pass
+
+        # Setup mock agents
+        sender = Agent(
+            id=uuid4(),
+            external_id="alice",
+            organization_id=uuid4(),
+            name="Alice",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+        recipient = Agent(
+            id=uuid4(),
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        # Setup mock session
+        session_id = uuid4()
+        session = Session(
+            id=session_id,
+            agent_a_id=sender.id,
+            agent_b_id=recipient.id,
+            status=SessionStatus.ACTIVE,
+            locked_agent_id=None,
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+            ended_at=None,
+        )
+
+        message_id = uuid4()
+        system_message_id = uuid4()
+
+        mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[sender, recipient])
+        mock_session_repo.get_active_session = AsyncMock(return_value=None)
+        mock_session_repo.create = AsyncMock(return_value=session_id)
+        mock_session_repo.get_by_id = AsyncMock(return_value=session)
+        mock_session_repo.set_locked_agent = AsyncMock()
+        mock_message_repo.create = AsyncMock(side_effect=[message_id, system_message_id])
+
+        # Mock the connection context manager
+        mock_connection = AsyncMock()
+        mock_connection_cm = MagicMock()
+        mock_connection_cm.__aenter__ = AsyncMock(return_value=mock_connection)
+        mock_connection_cm.__aexit__ = AsyncMock(return_value=None)
+        mock_message_repo.db_manager.connection = MagicMock(return_value=mock_connection_cm)
+
+        # Mock session lock
+        with patch("agent_messaging.messaging.conversation.SessionLock") as mock_session_lock_class:
+            mock_session_lock = AsyncMock()
+            mock_session_lock.acquire = AsyncMock(return_value=True)
+            mock_session_lock_class.return_value = mock_session_lock
+
+            # Send and wait (should timeout)
+            result = await conversation.send_and_wait("alice", "bob", {"text": "Help needed"}, timeout=30)
+
+            # Verify result is ConversationResult
+            assert isinstance(result, ConversationResult)
+            assert result.status == "timeout"
+
+            # Verify system message was created with the correct content
+            calls = mock_message_repo.create.call_args_list
+            system_msg_call = calls[1]
+
+            # Verify the system message contains expected text
+            system_msg_content = system_msg_call[1]["content"]
+            assert "[System]" in system_msg_content["text"]
+            assert "30s" in system_msg_content["text"]
+            assert "did not respond" in system_msg_content["text"].lower()
+            assert "queued" in system_msg_content["text"].lower()
+
+    @pytest.mark.asyncio
+    async def test_send_and_wait_timeout_original_message_survives(
+        self,
+        conversation,
+        mock_agent_repo,
+        mock_session_repo,
+        mock_message_repo,
+        mock_invoke_handler_async,
+    ):
+        """Test that original message is preserved in queue after timeout."""
+
+        # Register a handler so has_handler() returns True
+        @register_conversation_handler
+        async def test_handler(message, context):
+            pass
+
+        # Setup mock agents
+        sender = Agent(
+            id=uuid4(),
+            external_id="alice",
+            organization_id=uuid4(),
+            name="Alice",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+        recipient = Agent(
+            id=uuid4(),
+            external_id="bob",
+            organization_id=uuid4(),
+            name="Bob",
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+        )
+
+        # Setup mock session
+        session_id = uuid4()
+        session = Session(
+            id=session_id,
+            agent_a_id=sender.id,
+            agent_b_id=recipient.id,
+            status=SessionStatus.ACTIVE,
+            locked_agent_id=None,
+            created_at=MagicMock(),
+            updated_at=MagicMock(),
+            ended_at=None,
+        )
+
+        message_id = uuid4()
+        system_message_id = uuid4()
+
+        mock_agent_repo.get_by_external_id = AsyncMock(side_effect=[sender, recipient])
+        mock_session_repo.get_active_session = AsyncMock(return_value=None)
+        mock_session_repo.create = AsyncMock(return_value=session_id)
+        mock_session_repo.get_by_id = AsyncMock(return_value=session)
+        mock_session_repo.set_locked_agent = AsyncMock()
+        mock_message_repo.create = AsyncMock(side_effect=[message_id, system_message_id])
+
+        # Mock the connection context manager
+        mock_connection = AsyncMock()
+        mock_connection_cm = MagicMock()
+        mock_connection_cm.__aenter__ = AsyncMock(return_value=mock_connection)
+        mock_connection_cm.__aexit__ = AsyncMock(return_value=None)
+        mock_message_repo.db_manager.connection = MagicMock(return_value=mock_connection_cm)
+
+        # Mock session lock
+        with patch("agent_messaging.messaging.conversation.SessionLock") as mock_session_lock_class:
+            mock_session_lock = AsyncMock()
+            mock_session_lock.acquire = AsyncMock(return_value=True)
+            mock_session_lock_class.return_value = mock_session_lock
+
+            # Send and wait (should timeout)
+            result = await conversation.send_and_wait("alice", "bob", {"text": "Important request"}, timeout=5)
+
+            # Verify result is ConversationResult with timeout status
+            assert isinstance(result, ConversationResult)
+            assert result.status == "timeout"
+
+            # Verify original message ID is returned in result
+            assert result.original_message_id == message_id
+
+            # Verify two messages were created:
+            # 1. The original user message (stored for when recipient comes back online)
+            # 2. The system message explaining the timeout
+            assert mock_message_repo.create.call_count == 2
+
+            first_call = mock_message_repo.create.call_args_list[0]
+            second_call = mock_message_repo.create.call_args_list[1]
+
+            # First message should be the user message (not marked as SYSTEM)
+            assert first_call[1]["message_type"] == MessageType.USER_DEFINED
+            assert first_call[1]["content"] == {"text": "Important request"}
+
+            # Second message should be the system message
+            assert second_call[1]["message_type"] == MessageType.SYSTEM
 
     @pytest.mark.asyncio
     async def test_end_conversation_success(

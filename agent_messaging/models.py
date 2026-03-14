@@ -303,3 +303,12 @@ class AgentResponse(BaseModel):
     organization_id: UUID
     name: str
     created_at: datetime
+
+
+class ConversationResult(BaseModel):
+    """Result of a send_and_wait operation."""
+
+    status: str  # "success" or "timeout"
+    message: Optional[Any] = None  # Response message (None on timeout)
+    timeout_seconds: Optional[float] = None  # Timeout value (for timeout status)
+    original_message_id: Optional[UUID] = None  # Message ID sent (for timeout status)

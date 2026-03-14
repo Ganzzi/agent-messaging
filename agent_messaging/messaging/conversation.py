@@ -22,7 +22,7 @@ from ..handlers.registry import (
     invoke_handler_async,
 )
 from ..handlers.types import HandlerContext, MessageContext, T_Conversation
-from ..models import MessageType, SessionStatus
+from ..models import MessageType, SessionStatus, ConversationResult
 from ..utils.locks import SessionLock
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,37 @@ class Conversation(Generic[T_Conversation]):
         # For now, return the dict as-is. In a more sophisticated implementation,
         # this could use type hints or Pydantic models to reconstruct the original type.
         return content_dict  # type: ignore
+
+    async def _send_system_message(
+        self,
+        session_id: UUID,
+        sender_id: UUID,
+        recipient_id: UUID,
+        message_text: str,
+    ) -> UUID:
+        """Send a system message to a conversation session.
+
+        Args:
+            session_id: Session ID
+            sender_id: Sender agent ID
+            recipient_id: Recipient agent ID
+            message_text: System message text
+
+        Returns:
+            Message ID of the system message
+        """
+        system_message_content = {"type": "system", "text": message_text}
+
+        message_id = await self._message_repo.create(
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            session_id=session_id,
+            content=system_message_content,
+            message_type=MessageType.SYSTEM,
+        )
+
+        logger.info(f"System message sent: {message_id} in session {session_id}")
+        return message_id
 
     async def send_and_wait(
         self,
@@ -374,7 +405,22 @@ class Conversation(Generic[T_Conversation]):
                         del self._waiting_events[session.id]
                     if session.id in self._waiting_responses:
                         del self._waiting_responses[session.id]
-                    raise TimeoutError(f"No response received within {timeout} seconds")
+
+                    # Send system message explaining the timeout
+                    await self._send_system_message(
+                        session_id=session.id,
+                        sender_id=sender.id,
+                        recipient_id=recipient.id,
+                        message_text=f"[System] Human worker did not respond within {int(timeout)}s. Message queued for when they return online.",
+                    )
+
+                    # Return structured result instead of raising exception
+                    return ConversationResult(
+                        status="timeout",
+                        message=None,
+                        timeout_seconds=timeout,
+                        original_message_id=message_id,
+                    )  # type: ignore
 
             finally:
                 # Always release lock and clear locked agent
