@@ -60,6 +60,7 @@ pydantic-settings = "^2.0"
 pytest = "^7.4"
 pytest-asyncio = "^0.21"
 pytest-cov = "^4.1"
+pytest-mock = "^3.14"
 black = "^23.0"
 mypy = "^1.5"
 ruff = "^0.1"
@@ -76,12 +77,19 @@ dev = [
     "pydantic-settings>=2.11.0",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.14.0",
     "python-dotenv>=1.1.1",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "unit: fast tests without external infrastructure",
+    "integration: tests requiring external infrastructure",
+    "e2e: end-to-end tests",
+]
 
 [tool.black]
 line-length = 100
