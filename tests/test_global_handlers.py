@@ -110,7 +110,6 @@ class TestGlobalHandlerRegistration:
 class TestHandlerInvocation:
     """Test handler invocation functions."""
 
-    @pytest.mark.asyncio
     async def test_invoke_handler_async(self):
         """Test async handler invocation."""
 
@@ -129,7 +128,6 @@ class TestHandlerInvocation:
         result = await invoke_handler_async(HandlerContext.ONE_WAY, "test", ctx)
         assert result == "processed: test"
 
-    @pytest.mark.asyncio
     async def test_invoke_conversation_handler(self):
         """Test conversation handler returns response."""
 
@@ -148,7 +146,6 @@ class TestHandlerInvocation:
         result = await invoke_handler_async(HandlerContext.CONVERSATION, "hello", ctx)
         assert result == {"reply": "hello"}
 
-    @pytest.mark.asyncio
     async def test_invoke_no_handler_raises(self):
         """Test invoking handler when none registered raises error."""
         ctx = MessageContext(
@@ -179,7 +176,6 @@ class TestHandlerInvocation:
         result = invoke_handler(HandlerContext.ONE_WAY, "test", ctx)
         assert result == "sync: test"
 
-    @pytest.mark.asyncio
     async def test_handler_exception_propagates(self):
         """Test that exceptions in handlers are propagated."""
 
@@ -198,7 +194,6 @@ class TestHandlerInvocation:
         with pytest.raises(ValueError, match="Handler error"):
             await invoke_handler_async(HandlerContext.ONE_WAY, "test", ctx)
 
-    @pytest.mark.asyncio
     async def test_sync_handler_works_with_async_invoke(self):
         """Test that sync handlers work with async invocation."""
 

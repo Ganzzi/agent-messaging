@@ -18,7 +18,6 @@ from agent_messaging.models import MessageType, Agent
 class TestMessageMetadata:
     """Test message metadata storage and retrieval."""
 
-    @pytest.mark.asyncio
     async def test_send_message_with_metadata(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -39,7 +38,6 @@ class TestMessageMetadata:
         assert msg.metadata["category"] == "alert"
         assert "urgent" in msg.metadata["tags"]
 
-    @pytest.mark.asyncio
     async def test_send_message_with_multiple_metadata_fields(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -69,7 +67,6 @@ class TestMessageMetadata:
 class TestMetadataQuerying:
     """Test querying messages by metadata."""
 
-    @pytest.mark.asyncio
     async def test_query_by_metadata_exact_match(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -97,7 +94,6 @@ class TestMetadataQuerying:
         assert len(high_priority) >= 1
         assert all(msg.metadata.get("priority") == "high" for msg in high_priority)
 
-    @pytest.mark.asyncio
     async def test_query_by_metadata_contains(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -121,7 +117,6 @@ class TestMetadataQuerying:
         ]
         assert len(security_msg) >= 1
 
-    @pytest.mark.asyncio
     async def test_query_by_metadata_exists(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -154,7 +149,6 @@ class TestMetadataQuerying:
 class TestAdvancedFiltering:
     """Test advanced filtering with date ranges and message types."""
 
-    @pytest.mark.asyncio
     async def test_filter_by_date_range(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -178,7 +172,6 @@ class TestAdvancedFiltering:
 
         assert len(messages) >= 3
 
-    @pytest.mark.asyncio
     async def test_filter_by_message_type(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -207,7 +200,6 @@ class TestAdvancedFiltering:
         assert len(user_messages) >= 1
         assert all(msg.message_type == MessageType.USER_DEFINED for msg in user_messages)
 
-    @pytest.mark.asyncio
     async def test_filter_by_read_status(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -235,7 +227,6 @@ class TestAdvancedFiltering:
 class TestCombinedFiltering:
     """Test combining multiple filter conditions."""
 
-    @pytest.mark.asyncio
     async def test_combined_metadata_and_sender(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -257,7 +248,6 @@ class TestCombinedFiltering:
         assert all(msg.metadata.get("priority") == "high" for msg in messages)
         assert all(msg.sender_id == agent_alice.id for msg in messages)
 
-    @pytest.mark.asyncio
     async def test_combined_metadata_and_recipient(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -280,7 +270,6 @@ class TestCombinedFiltering:
         assert all(msg.metadata.get("category") == "announcement" for msg in messages)
         assert all(msg.recipient_id == agent_bob.id for msg in messages)
 
-    @pytest.mark.asyncio
     async def test_pagination_with_filtering(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -314,7 +303,6 @@ class TestCombinedFiltering:
 class TestMetadataPerformance:
     """Test metadata query performance with indexes."""
 
-    @pytest.mark.asyncio
     async def test_large_metadata_query_performance(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):
@@ -337,7 +325,6 @@ class TestMetadataPerformance:
         assert len(high_priority) >= 10
         assert all(msg.metadata["priority"] == "high" for msg in high_priority)
 
-    @pytest.mark.asyncio
     async def test_complex_metadata_structure(
         self, message_repo_integration: MessageRepository, agent_alice: Agent, agent_bob: Agent
     ):

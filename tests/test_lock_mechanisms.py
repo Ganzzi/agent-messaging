@@ -39,7 +39,6 @@ async def db_manager_for_locks(db_manager: PostgreSQLManager):
 class TestSessionLockBasics:
     """Test basic lock operations: acquire, release, and idempotency."""
 
-    @pytest.mark.asyncio
     async def test_lock_acquire_and_release(self, db_manager_for_locks: PostgreSQLManager):
         """Test that locks can be acquired and released successfully."""
         session_id = uuid4()
@@ -52,7 +51,6 @@ class TestSessionLockBasics:
             released = await lock.release(conn)
             assert released
 
-    @pytest.mark.asyncio
     async def test_lock_acquire_on_same_connection(self, db_manager_for_locks: PostgreSQLManager):
         """Test that lock is acquired and released on the SAME connection.
 
@@ -71,7 +69,6 @@ class TestSessionLockBasics:
             released = await lock.release(conn)
             assert released
 
-    @pytest.mark.asyncio
     async def test_lock_double_acquire_is_idempotent(self, db_manager_for_locks: PostgreSQLManager):
         """Test that acquiring an already-held lock is idempotent."""
         session_id = uuid4()
@@ -89,7 +86,6 @@ class TestSessionLockBasics:
             # Cleanup
             await lock.release(conn)
 
-    @pytest.mark.asyncio
     async def test_lock_double_release_is_safe(self, db_manager_for_locks: PostgreSQLManager):
         """Test that releasing an already-released lock is safe."""
         session_id = uuid4()
@@ -104,7 +100,6 @@ class TestSessionLockBasics:
             released2 = await lock.release(conn)
             assert not released2
 
-    @pytest.mark.asyncio
     async def test_lock_release_without_acquire_is_safe(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -121,7 +116,6 @@ class TestSessionLockBasics:
 class TestLockExceptionHandling:
     """Test that locks are properly cleaned up on exceptions."""
 
-    @pytest.mark.asyncio
     async def test_lock_cleanup_on_exception_in_critical_section(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -140,7 +134,6 @@ class TestLockExceptionHandling:
                 # Clean up lock
                 await lock.release(conn)
 
-    @pytest.mark.asyncio
     async def test_lock_cleanup_with_connection_context(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -157,7 +150,6 @@ class TestLockExceptionHandling:
             finally:
                 await lock.release(conn)
 
-    @pytest.mark.asyncio
     async def test_lock_cleanup_with_exception_in_finally(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -179,7 +171,6 @@ class TestLockExceptionHandling:
 class TestConcurrentLocking:
     """Test concurrent lock operations and serialization."""
 
-    @pytest.mark.asyncio
     async def test_two_locks_on_same_session_serialize(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -220,7 +211,6 @@ class TestConcurrentLocking:
         assert "task1_start" in execution_order
         assert "task1_end" in execution_order
 
-    @pytest.mark.asyncio
     async def test_locks_on_different_sessions_run_concurrently(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -261,7 +251,6 @@ class TestConcurrentLocking:
         assert execution_order.count("task1_end") == 1
         assert execution_order.count("task2_end") == 1
 
-    @pytest.mark.asyncio
     async def test_many_concurrent_locks_on_same_session(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -288,7 +277,6 @@ class TestConcurrentLocking:
         # At least one task should succeed (pg_try_advisory_lock is non-blocking)
         assert counter["value"] >= 1
 
-    @pytest.mark.asyncio
     async def test_many_concurrent_locks_on_different_sessions(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -316,7 +304,6 @@ class TestConcurrentLocking:
 class TestLockKeyGeneration:
     """Test lock key generation from session UUIDs."""
 
-    @pytest.mark.asyncio
     async def test_lock_key_is_consistent_for_same_session(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -328,7 +315,6 @@ class TestLockKeyGeneration:
 
         assert lock1.lock_key == lock2.lock_key
 
-    @pytest.mark.asyncio
     async def test_lock_key_is_different_for_different_sessions(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -341,7 +327,6 @@ class TestLockKeyGeneration:
 
         assert lock1.lock_key != lock2.lock_key
 
-    @pytest.mark.asyncio
     async def test_lock_key_is_valid_bigint(self, db_manager_for_locks: PostgreSQLManager):
         """Test that lock key is a valid PostgreSQL bigint (positive)."""
         session_id = uuid4()
@@ -355,7 +340,6 @@ class TestLockKeyGeneration:
 class TestMeetingLockIntegration:
     """Test lock usage in meeting scenarios."""
 
-    @pytest.mark.asyncio
     async def test_meeting_lock_prevents_concurrent_speak(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -385,7 +369,6 @@ class TestMeetingLockIntegration:
         # At least one speaker should successfully acquire lock and speak
         assert len(speaker_order) >= 2  # At least one start and one end
 
-    @pytest.mark.asyncio
     async def test_meeting_lock_allows_concurrent_different_meetings(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -419,7 +402,6 @@ class TestMeetingLockIntegration:
 class TestLockConnectionLifecycle:
     """Test lock behavior across connection lifecycle."""
 
-    @pytest.mark.asyncio
     async def test_lock_released_when_connection_closes(
         self, db_manager_for_locks: PostgreSQLManager
     ):
@@ -447,7 +429,6 @@ class TestLockConnectionLifecycle:
             assert acquired_again
             await lock.release(conn2)
 
-    @pytest.mark.asyncio
     async def test_lock_survives_across_operations_on_same_connection(
         self, db_manager_for_locks: PostgreSQLManager
     ):

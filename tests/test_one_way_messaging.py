@@ -76,7 +76,6 @@ def one_way_messenger(mock_message_repo, mock_agent_repo, mock_org_repo):
 class TestOneWayMessenger:
     """Test cases for OneWayMessenger."""
 
-    @pytest.mark.asyncio
     async def test_send_success(
         self, one_way_messenger, mock_agent_repo, mock_message_repo, mock_invoke_handler_async
     ):
@@ -129,7 +128,6 @@ class TestOneWayMessenger:
         assert call_args[0][1] == {"text": "Hello!"}  # message (positional arg 1)
         assert isinstance(call_args[0][2], MessageContext)  # context (positional arg 2)
 
-    @pytest.mark.asyncio
     async def test_send_sender_not_found(self, one_way_messenger, mock_agent_repo):
         """Test sending message with non-existent sender."""
         mock_agent_repo.get_by_external_id = AsyncMock(return_value=None)
@@ -137,7 +135,6 @@ class TestOneWayMessenger:
         with pytest.raises(AgentNotFoundError, match="Sender agent not found: alice"):
             await one_way_messenger.send("alice", ["bob"], {"text": "Hello!"})
 
-    @pytest.mark.asyncio
     async def test_send_recipient_not_found(self, one_way_messenger, mock_agent_repo):
         """Test sending message with non-existent recipient."""
         sender = Agent(
@@ -154,7 +151,6 @@ class TestOneWayMessenger:
         with pytest.raises(AgentNotFoundError, match="Recipient agent not found: bob"):
             await one_way_messenger.send("alice", ["bob"], {"text": "Hello!"})
 
-    @pytest.mark.asyncio
     async def test_send_no_handler(self, one_way_messenger, mock_agent_repo):
         """Test sending message when no handler is registered."""
         sender = Agent(

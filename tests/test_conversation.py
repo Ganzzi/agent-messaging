@@ -97,7 +97,6 @@ def conversation(mock_message_repo, mock_session_repo, mock_agent_repo):
 class TestConversation:
     """Test cases for unified Conversation (combines sync and async patterns)."""
 
-    @pytest.mark.asyncio
     async def test_send_and_wait_success(
         self,
         conversation,
@@ -211,7 +210,6 @@ class TestConversation:
         # Verify handler was invoked
         mock_invoke_handler_async.assert_called_once()
 
-    @pytest.mark.asyncio
     async def test_send_and_wait_timeout(
         self,
         conversation,
@@ -299,7 +297,6 @@ class TestConversation:
             assert "[System]" in str(second_call[1]["content"])
             assert "did not respond" in str(second_call[1]["content"]).lower()
 
-    @pytest.mark.asyncio
     async def test_send_and_wait_timeout_system_message_sent(
         self,
         conversation,
@@ -387,7 +384,6 @@ class TestConversation:
             assert "did not respond" in system_msg_content["text"].lower()
             assert "queued" in system_msg_content["text"].lower()
 
-    @pytest.mark.asyncio
     async def test_send_and_wait_timeout_original_message_survives(
         self,
         conversation,
@@ -482,7 +478,6 @@ class TestConversation:
             # Second message should be the system message
             assert second_call[1]["message_type"] == MessageType.SYSTEM
 
-    @pytest.mark.asyncio
     async def test_end_conversation_success(
         self,
         conversation,
@@ -564,7 +559,6 @@ class TestConversation:
         result = conversation._serialize_content("plain string")
         assert result == {"data": "plain string"}
 
-    @pytest.mark.asyncio
     async def test_send_no_wait_success(
         self,
         conversation,
@@ -635,7 +629,6 @@ class TestConversation:
         # Verify handler was invoked
         mock_invoke_handler_async.assert_called_once()
 
-    @pytest.mark.asyncio
     async def test_send_no_wait_sender_not_found(self, conversation, mock_agent_repo):
         """Test send_no_wait with non-existent sender."""
         mock_agent_repo.get_by_external_id = AsyncMock(return_value=None)
@@ -643,7 +636,6 @@ class TestConversation:
         with pytest.raises(AgentNotFoundError, match="Sender agent not found: alice"):
             await conversation.send_no_wait("alice", "bob", {"text": "Hello!"})
 
-    @pytest.mark.asyncio
     async def test_send_no_wait_recipient_not_found(self, conversation, mock_agent_repo):
         """Test send_no_wait with non-existent recipient."""
         sender = Agent(
@@ -660,7 +652,6 @@ class TestConversation:
         with pytest.raises(AgentNotFoundError, match="Recipient agent not found: bob"):
             await conversation.send_no_wait("alice", "bob", {"text": "Hello!"})
 
-    @pytest.mark.asyncio
     async def test_get_unread_messages_async(
         self, conversation, mock_agent_repo, mock_message_repo
     ):
@@ -717,7 +708,6 @@ class TestConversation:
         # Verify messages were marked as read
         assert mock_message_repo.mark_as_read.call_count == 2
 
-    @pytest.mark.asyncio
     async def test_get_or_wait_for_response_success(
         self, conversation, mock_agent_repo, mock_message_repo
     ):
@@ -767,7 +757,6 @@ class TestConversation:
         assert result == {"text": "Hello Bob"}
         mock_message_repo.mark_as_read.assert_called_once_with(message.id)
 
-    @pytest.mark.asyncio
     async def test_get_or_wait_for_response_timeout(
         self, conversation, mock_agent_repo, mock_message_repo, mock_session_repo
     ):

@@ -109,7 +109,6 @@ def sample_meeting():
 class TestMeetingManager:
     """Test cases for MeetingManager."""
 
-    @pytest.mark.asyncio
     async def test_create_meeting_success(
         self, meeting_manager, mock_agent_repo, mock_meeting_repo
     ):
@@ -140,7 +139,6 @@ class TestMeetingManager:
         assert call_args[1]["host_id"] == host.id
         assert call_args[1]["turn_duration"] == 60.0
 
-    @pytest.mark.asyncio
     async def test_create_meeting_host_not_found(self, meeting_manager, mock_agent_repo):
         """Test meeting creation with non-existent host."""
         mock_agent_repo.get_by_external_id = AsyncMock(side_effect=AgentNotFoundError("alice"))
@@ -148,7 +146,6 @@ class TestMeetingManager:
         with pytest.raises(AgentNotFoundError):
             await meeting_manager.create_meeting("alice", ["bob"], 60.0)
 
-    @pytest.mark.asyncio
     async def test_attend_meeting_success(
         self, meeting_manager, mock_agent_repo, mock_meeting_repo, sample_meeting
     ):
@@ -185,7 +182,6 @@ class TestMeetingManager:
             status=ParticipantStatus.ATTENDING,
         )
 
-    @pytest.mark.asyncio
     async def test_start_meeting_success(
         self,
         meeting_manager,
@@ -219,7 +215,6 @@ class TestMeetingManager:
         )
         mock_event_handler.emit_meeting_started.assert_called()
 
-    @pytest.mark.asyncio
     async def test_start_meeting_not_host(
         self, meeting_manager, mock_agent_repo, mock_meeting_repo, sample_meeting
     ):
@@ -239,7 +234,6 @@ class TestMeetingManager:
         with pytest.raises(MeetingPermissionError, match="Agent 'bob' is not the host"):
             await meeting_manager.start_meeting("bob", sample_meeting.id)
 
-    @pytest.mark.asyncio
     async def test_speak_success(
         self, meeting_manager, mock_agent_repo, mock_meeting_repo, sample_meeting, mock_message_repo
     ):
@@ -302,7 +296,6 @@ class TestMeetingManager:
         assert message_id is not None
         mock_message_repo.create.assert_called_once()
 
-    @pytest.mark.asyncio
     async def test_speak_not_your_turn(
         self, meeting_manager, mock_agent_repo, mock_meeting_repo, sample_meeting
     ):
@@ -345,7 +338,6 @@ class TestMeetingManager:
         with pytest.raises(NotYourTurnError, match="It's not alice's turn"):
             await meeting_manager.speak("alice", active_meeting.id, {"text": "Hello!"})
 
-    @pytest.mark.asyncio
     async def test_end_meeting_success(
         self,
         meeting_manager,
@@ -388,7 +380,6 @@ class TestMeetingManager:
         )
         mock_event_handler.emit_meeting_ended.assert_called()
 
-    @pytest.mark.asyncio
     async def test_get_meeting_status(self, meeting_manager, mock_meeting_repo, sample_meeting):
         """Test getting meeting status."""
         mock_meeting_repo.get_by_id = AsyncMock(return_value=sample_meeting)
@@ -406,7 +397,6 @@ class TestMeetingManager:
         assert "participants" in status
         assert "current_speaker" in status
 
-    @pytest.mark.asyncio
     async def test_get_meeting_history(self, meeting_manager, mock_message_repo):
         """Test getting meeting history."""
         meeting_id = uuid4()

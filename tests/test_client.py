@@ -118,7 +118,6 @@ def mock_event_handler():
 class TestAgentMessagingSDK:
     """Integration tests for AgentMessaging SDK."""
 
-    @pytest.mark.asyncio
     async def test_sdk_initialization_and_context_manager(
         self, mock_config, mock_db_manager, mock_repos, mock_event_handler
     ):
@@ -157,7 +156,6 @@ class TestAgentMessagingSDK:
             await sdk.__aexit__(None, None, None)
             mock_db_manager.close.assert_called_once()
 
-    @pytest.mark.asyncio
     async def test_register_organization(self, mock_config, mock_db_manager, mock_repos):
         """Test organization registration."""
         with (
@@ -184,7 +182,6 @@ class TestAgentMessagingSDK:
                     "test_org", "Test Organization"
                 )
 
-    @pytest.mark.asyncio
     async def test_get_organization(self, mock_config, mock_db_manager, mock_repos):
         """Test organization retrieval."""
         with (
@@ -210,7 +207,6 @@ class TestAgentMessagingSDK:
                 assert org.name == "Test Organization"
                 mock_repos["org_repo"].get_by_external_id.assert_called_once_with("test_org")
 
-    @pytest.mark.asyncio
     async def test_get_organization_not_found(self, mock_config, mock_db_manager, mock_repos):
         """Test organization retrieval when not found."""
         mock_repos["org_repo"].get_by_external_id = AsyncMock(return_value=None)
@@ -236,7 +232,6 @@ class TestAgentMessagingSDK:
                 with pytest.raises(OrganizationNotFoundError):
                     await sdk.get_organization("nonexistent_org")
 
-    @pytest.mark.asyncio
     async def test_register_agent(self, mock_config, mock_db_manager, mock_repos):
         """Test agent registration."""
         with (
@@ -262,7 +257,6 @@ class TestAgentMessagingSDK:
                 mock_repos["org_repo"].get_by_external_id.assert_called_once_with("test_org")
                 mock_repos["agent_repo"].create.assert_called_once()
 
-    @pytest.mark.asyncio
     async def test_register_agent_org_not_found(self, mock_config, mock_db_manager, mock_repos):
         """Test agent registration with nonexistent organization."""
         mock_repos["org_repo"].get_by_external_id = AsyncMock(return_value=None)
@@ -288,7 +282,6 @@ class TestAgentMessagingSDK:
                 with pytest.raises(OrganizationNotFoundError):
                     await sdk.register_agent("test_agent", "nonexistent_org", "Test Agent")
 
-    @pytest.mark.asyncio
     async def test_get_agent(self, mock_config, mock_db_manager, mock_repos):
         """Test agent retrieval."""
         with (
@@ -314,7 +307,6 @@ class TestAgentMessagingSDK:
                 assert agent.name == "Test Agent"
                 mock_repos["agent_repo"].get_by_external_id.assert_called_once_with("test_agent")
 
-    @pytest.mark.asyncio
     async def test_get_agent_not_found(self, mock_config, mock_db_manager, mock_repos):
         """Test agent retrieval when not found."""
         mock_repos["agent_repo"].get_by_external_id = AsyncMock(return_value=None)
@@ -340,7 +332,6 @@ class TestAgentMessagingSDK:
                 with pytest.raises(AgentNotFoundError):
                     await sdk.get_agent("nonexistent_agent")
 
-    @pytest.mark.asyncio
     async def test_register_handler(self, mock_config, mock_db_manager, mock_repos):
         """Test message handler registration with global decorators."""
         with (
@@ -368,7 +359,6 @@ class TestAgentMessagingSDK:
                 # Verify handler was registered globally
                 assert has_handler(HandlerContext.ONE_WAY) is True
 
-    @pytest.mark.asyncio
     async def test_register_event_handler(
         self, mock_config, mock_db_manager, mock_repos, mock_event_handler
     ):
@@ -402,7 +392,6 @@ class TestAgentMessagingSDK:
                     MeetingEventType.MEETING_STARTED, on_meeting_started
                 )
 
-    @pytest.mark.asyncio
     async def test_has_handler(self, mock_config, mock_db_manager, mock_repos):
         """Test global handler existence check."""
         with (
@@ -431,7 +420,6 @@ class TestAgentMessagingSDK:
                 assert has_handler(HandlerContext.ONE_WAY) is True
                 assert has_handler(HandlerContext.CONVERSATION) is False
 
-    @pytest.mark.asyncio
     async def test_messaging_properties(self, mock_config, mock_db_manager, mock_repos):
         """Test messaging property access."""
         with (
@@ -464,7 +452,6 @@ class TestAgentMessagingSDK:
                 meeting = sdk.meeting
                 assert meeting is not None
 
-    @pytest.mark.asyncio
     async def test_sdk_not_initialized_error(self, mock_config):
         """Test error when SDK methods called before initialization."""
         sdk = AgentMessaging[dict, dict, dict](mock_config)
@@ -483,7 +470,6 @@ class TestAgentMessagingSDK:
         with pytest.raises(RuntimeError, match="SDK not initialized"):
             await sdk.get_agent("agent")
 
-    @pytest.mark.asyncio
     async def test_repository_properties(self, mock_config, mock_db_manager, mock_repos):
         """Test repository property access."""
         with (

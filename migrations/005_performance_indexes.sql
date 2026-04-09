@@ -143,8 +143,8 @@ COMMENT ON INDEX idx_meeting_events_agent IS
 -- 14. Agents by organization with active status
 -- Supports listing active agents in an organization
 CREATE INDEX IF NOT EXISTS idx_agents_org_active
-ON agents (org_id, external_id)
-WHERE org_id IS NOT NULL;
+ON agents (organization_id, external_id)
+WHERE organization_id IS NOT NULL;
 
 COMMENT ON INDEX idx_agents_org_active IS
 'Optimizes queries for agents within an organization';

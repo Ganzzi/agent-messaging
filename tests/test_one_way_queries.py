@@ -8,7 +8,6 @@ from agent_messaging.messaging.one_way import OneWayMessenger
 from agent_messaging.exceptions import AgentNotFoundError
 
 
-@pytest.mark.asyncio
 class TestOneWayQueryMethods:
     """Test query methods for one-way messages."""
 

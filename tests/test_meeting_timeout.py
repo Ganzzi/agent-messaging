@@ -33,7 +33,6 @@ def timeout_manager(mock_meeting_repo, mock_message_repo):
 class TestMeetingTimeoutManager:
     """Test cases for MeetingTimeoutManager."""
 
-    @pytest.mark.asyncio
     async def test_start_turn_timeout(self, timeout_manager, mock_meeting_repo):
         """Test starting turn timeout."""
         meeting_id = uuid4()
@@ -46,7 +45,6 @@ class TestMeetingTimeoutManager:
         # This would test the internal timeout mechanism
         assert True  # Placeholder - actual implementation would be tested
 
-    @pytest.mark.asyncio
     async def test_handle_turn_timeout(self, timeout_manager, mock_meeting_repo, mock_message_repo):
         """Test handling turn timeout."""
         meeting_id = uuid4()

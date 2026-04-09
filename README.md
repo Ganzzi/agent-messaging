@@ -5,8 +5,8 @@
 [![PyPI version](https://img.shields.io/pypi/v/agent-messaging.svg)](https://pypi.org/project/agent-messaging/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: v0.5.0 Released](https://img.shields.io/badge/Status-v0.5.0%20Released-brightgreen.svg)]()
-[![Tests: 179/179 (100%)](https://img.shields.io/badge/Tests-179%2F179%20(100%25)-brightgreen.svg)]()
+[![Status: v0.4.0 Released](https://img.shields.io/badge/Status-v0.4.0%20Released-brightgreen.svg)]()
+[![Tests: 192 tests](https://img.shields.io/badge/Tests-192%20tests-brightgreen.svg)]()
 
 **Agent Messaging Protocol** is a Python SDK that enables AI agents to communicate with each other using human-like messaging patterns. It supports synchronous and asynchronous conversations, one-way notifications, and multi-agent meetings with turn-based coordination.
 
@@ -26,7 +26,7 @@
 - ✅ **Type-Safe:** Generic message types with Pydantic validation
 - ✅ **High Performance:** PostgreSQL with psqlpy async driver
 - ✅ **Scalable:** Connection pooling and efficient database design
-- ✅ **Real-Time Events:** 11 event types for meeting lifecycle and messaging (v0.5.0)
+- ✅ **Real-Time Events:** 11 event types for meeting lifecycle and messaging
 - ✅ **Extensible:** Handler registration and comprehensive event system
 - ✅ **Async Native:** Full async/await support with asyncio
 - ✅ **Production Ready:** Comprehensive error handling and timeout management
@@ -36,6 +36,10 @@
 ## 🚀 Quick Start
 
 ### Installation
+
+```bash
+uv sync --all-groups --all-extras
+```
 
 ### Configuration
 
@@ -277,13 +281,13 @@ final = await sdk.conversation.send_and_wait(
 | Validation | Pydantic v2 | Type-safe data models |
 | Async | asyncio | Native concurrency |
 | Testing | pytest | Comprehensive testing |
-| Packaging | Poetry | Dependency management |
+| Packaging | uv | Dependency management |
 
 ---
 
 ## 🛠️ Development Status
 
-**Current Phase:** ✅ v2.0.0 Released - Production Ready
+**Current Phase:** ✅ v0.4.0 Released - Production Ready
 
 ### Implementation Timeline
 
@@ -296,10 +300,10 @@ Week 7:    Core API, Error Handling, Testing          [Complete]
 Week 8:    Testing & Quality Assurance                [Complete]
 Week 9:    Documentation & Examples                   [Complete]
 Week 10:   Major Refactoring (Architecture)           [Complete]
-Week 11:   v2.0.0 Release (Dec 15, 2025)              [Complete]
+Week 11:   v0.4.0 Release (Dec 15, 2025)              [Complete]
 ```
 
-**v2.0.0 Release Features:**
+**v0.4.0 Release Features:**
 - Query methods for all message types
 - Metadata support on all send operations
 - Organization and agent de-registration
@@ -393,7 +397,7 @@ python-dotenv = "^1.0"
 
 ## 📝 License
 
-To be determined (suggested: MIT or Apache 2.0)
+MIT
 
 ---
 
@@ -470,7 +474,6 @@ To be determined (suggested: MIT or Apache 2.0)
 **Status:** Phase 10 Complete - Major Refactoring Complete
 
 **Next Step:** Phase 11 - Packaging & Release
-**Next Step:** Phase 10 - Packaging & Release
 
 ---
 

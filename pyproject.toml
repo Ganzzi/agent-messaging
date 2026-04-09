@@ -56,15 +56,6 @@ psqlpy = "^0.11.0"
 pydantic = "^2.0"
 pydantic-settings = "^2.0"
 
-[tool.poetry.dev-dependencies]
-pytest = "^7.4"
-pytest-asyncio = "^0.21"
-pytest-cov = "^4.1"
-pytest-mock = "^3.14"
-black = "^23.0"
-mypy = "^1.5"
-ruff = "^0.1"
-python-dotenv = "^1.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -88,8 +79,17 @@ testpaths = ["tests"]
 markers = [
     "unit: fast tests without external infrastructure",
     "integration: tests requiring external infrastructure",
+    "performance: performance and load tests",
     "e2e: end-to-end tests",
+    "slow: tests that take longer than 1 second",
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+]
+addopts = "--ignore=scripts --strict-markers --strict-config --disable-warnings --tb=short -v --cov=agent_messaging --cov-report=term-missing --cov-report=html:htmlcov --cov-report=xml"
+norecursedirs = ["scripts", "examples", "docs"]
 
 [tool.black]
 line-length = 100

@@ -31,7 +31,6 @@ def agent_repo(mock_pool):
 class TestOrganizationRepository:
     """Test cases for OrganizationRepository."""
 
-    @pytest.mark.asyncio
     async def test_create_organization(self, org_repo, mock_pool):
         """Test creating a new organization."""
         # Mock the database response
@@ -49,7 +48,6 @@ class TestOrganizationRepository:
             ["org_001", "Test Organization"],
         )
 
-    @pytest.mark.asyncio
     async def test_get_by_external_id_found(self, org_repo, mock_pool):
         """Test getting organization by external ID when found."""
         org_data = {
@@ -68,7 +66,6 @@ class TestOrganizationRepository:
         assert result.external_id == "org_001"
         assert result.name == "Test Organization"
 
-    @pytest.mark.asyncio
     async def test_get_by_external_id_not_found(self, org_repo, mock_pool):
         """Test getting organization by external ID when not found."""
         org_repo._fetch_one = AsyncMock(return_value=None)
@@ -77,7 +74,6 @@ class TestOrganizationRepository:
 
         assert result is None
 
-    @pytest.mark.asyncio
     async def test_get_by_id_found(self, org_repo, mock_pool):
         """Test getting organization by ID when found."""
         org_id = uuid4()
@@ -100,7 +96,6 @@ class TestOrganizationRepository:
 class TestAgentRepository:
     """Test cases for AgentRepository."""
 
-    @pytest.mark.asyncio
     async def test_create_agent(self, agent_repo, mock_pool):
         """Test creating a new agent."""
         org_id = uuid4()
@@ -116,7 +111,6 @@ class TestAgentRepository:
             ["alice", org_id, "Alice Agent"],
         )
 
-    @pytest.mark.asyncio
     async def test_get_by_external_id_found(self, agent_repo, mock_pool):
         """Test getting agent by external ID when found."""
         agent_data = {
@@ -136,7 +130,6 @@ class TestAgentRepository:
         assert result.external_id == "alice"
         assert result.name == "Alice Agent"
 
-    @pytest.mark.asyncio
     async def test_get_by_external_id_not_found(self, agent_repo, mock_pool):
         """Test getting agent by external ID when not found."""
         agent_repo._fetch_one = AsyncMock(return_value=None)
@@ -145,7 +138,6 @@ class TestAgentRepository:
 
         assert result is None
 
-    @pytest.mark.asyncio
     async def test_get_by_organization(self, agent_repo, mock_pool):
         """Test getting agents by organization."""
         org_id = uuid4()

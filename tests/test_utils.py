@@ -35,7 +35,6 @@ class TestAdvisoryLock:
         lock_key2 = AdvisoryLock.generate_lock_key(session_id)
         assert lock_key == lock_key2
 
-    @pytest.mark.asyncio
     async def test_acquire_lock_success(self, mock_connection):
         """Test successful lock acquisition."""
         mock_connection.fetch_val.return_value = True
@@ -74,7 +73,6 @@ class TestSessionLock:
         assert session_lock.session_id == session_id
         assert session_lock.lock_key == AdvisoryLock.generate_lock_key(session_id)
 
-    @pytest.mark.asyncio
     async def test_acquire_success(self, session_lock, mock_connection):
         """Test successful session lock acquisition."""
         mock_connection.fetch_val.return_value = True
@@ -118,7 +116,6 @@ class TestMeetingTimeoutManager:
         assert timeout_manager._timeout_tasks == {}
         assert timeout_manager._check_interval == 5.0
 
-    @pytest.mark.asyncio
     async def test_start_turn_timeout_no_duration(self, timeout_manager):
         """Test starting timeout with no duration (should not start)."""
         meeting_id = uuid4()

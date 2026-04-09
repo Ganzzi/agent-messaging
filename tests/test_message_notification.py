@@ -36,7 +36,6 @@ def setup_notification_handler():
         notification_calls.append(context)
 
 
-@pytest.mark.asyncio
 async def test_notification_handler_invoked_when_receiver_not_locked(
     e2e_sdk: AgentMessaging,
 ):
@@ -73,7 +72,6 @@ async def test_notification_handler_invoked_when_receiver_not_locked(
     assert notification_calls[0].metadata["test"] == "notification"
 
 
-@pytest.mark.asyncio
 async def test_notification_handler_not_invoked_when_receiver_locked(
     e2e_sdk: AgentMessaging,
 ):
@@ -128,7 +126,6 @@ async def test_notification_handler_not_invoked_when_receiver_locked(
     await bob_task
 
 
-@pytest.mark.asyncio
 async def test_notification_handler_with_send_and_wait(
     e2e_sdk: AgentMessaging,
 ):
@@ -172,7 +169,6 @@ async def test_notification_handler_with_send_and_wait(
     await alice_task
 
 
-@pytest.mark.asyncio
 async def test_notification_handler_receives_correct_context(
     e2e_sdk: AgentMessaging,
 ):

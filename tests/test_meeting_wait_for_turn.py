@@ -8,7 +8,6 @@ from agent_messaging import AgentMessaging
 from agent_messaging.exceptions import MeetingNotActiveError
 
 
-@pytest.mark.asyncio
 class TestMeetingWaitForTurn:
     """Test suite for wait_for_turn parameter in attend_meeting and speak methods."""
 

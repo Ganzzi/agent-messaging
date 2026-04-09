@@ -143,3 +143,7 @@ dmypy.json
 .Trashes
 ehthumbs.db
 Thumbs.db
+.gitnexus
+.claude/
+AGENTS.md
+CLAUDE.md

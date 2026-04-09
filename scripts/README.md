@@ -54,12 +54,12 @@ uv run python scripts/start_postgres.py logs
 
 ---
 
-### 🧪 `test_client.py`
+### 🧪 `manual_client_demo.py`
 Manual test client demonstrating all AgentMessaging features.
 
 **Usage:**
 ```bash
-uv run python scripts/test_client.py
+uv run python scripts/manual_client_demo.py
 ```
 
 **What it demonstrates:**
@@ -130,7 +130,7 @@ uv run python scripts/start_postgres.py start
 uv run python scripts/init_db.py
 
 # 3. Run manual test client
-uv run python scripts/test_client.py
+uv run python scripts/manual_client_demo.py
 
 # 4. Run full test suite4
 uv run python scripts/run_tests.py
@@ -143,7 +143,7 @@ uv run python scripts/run_tests.py
 uv run python scripts/run_tests.py
 
 # Test specific features manually
-uv run python scripts/test_client.py
+uv run python scripts/manual_client_demo.py
 
 # Check PostgreSQL status
 uv run python scripts/start_postgres.py status

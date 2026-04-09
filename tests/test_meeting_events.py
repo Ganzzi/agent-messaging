@@ -28,7 +28,6 @@ class TestMeetingEventHandler:
         assert MeetingEventType.MEETING_STARTED in event_handler._handlers
         assert len(event_handler._handlers[MeetingEventType.MEETING_STARTED]) == 1
 
-    @pytest.mark.asyncio
     async def test_emit_event(self, event_handler):
         """Test emitting event."""
         events_received = []
@@ -47,7 +46,6 @@ class TestMeetingEventHandler:
         assert len(events_received) == 1
         assert events_received[0].data["meeting_id"] == "123"
 
-    @pytest.mark.asyncio
     async def test_emit_meeting_started(self, event_handler):
         """Test emitting meeting started event."""
         events_received = []
@@ -64,7 +62,6 @@ class TestMeetingEventHandler:
         assert len(events_received) == 1
         assert events_received[0].event_type == MeetingEventType.MEETING_STARTED
 
-    @pytest.mark.asyncio
     async def test_emit_turn_changed(self, event_handler):
         """Test emitting turn changed event."""
         events_received = []

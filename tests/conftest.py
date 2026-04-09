@@ -2,10 +2,11 @@
 
 import asyncio
 import os
+from pathlib import Path
 import pytest
 import pytest_asyncio
 from typing import AsyncGenerator, Generator, Dict, Any, List
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 from agent_messaging.client import AgentMessaging
@@ -34,6 +35,29 @@ from agent_messaging.utils.locks import SessionLock
 from agent_messaging.messaging.one_way import OneWayMessenger
 from agent_messaging.messaging.conversation import Conversation
 from agent_messaging.messaging.meeting import MeetingManager
+
+
+_DB_INTEGRATION_TEST_FILES = {
+    "test_lock_mechanisms.py",
+    "test_message_notification.py",
+    "test_metadata_filtering.py",
+    "test_meeting_wait_for_turn.py",
+}
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Auto-classify tests for deterministic PR unit gating.
+
+    Files that require a live PostgreSQL instance are marked as `integration`
+    so the Phase 1 PR command (`-m "not integration and not e2e"`) remains
+    reliable in environments without infrastructure services.
+    """
+    for item in items:
+        file_name = Path(str(item.fspath)).name
+        if file_name in _DB_INTEGRATION_TEST_FILES:
+            item.add_marker(pytest.mark.integration)
+        elif "integration" not in item.keywords and "e2e" not in item.keywords:
+            item.add_marker(pytest.mark.unit)
 
 
 # Test Configuration Fixtures
@@ -263,18 +287,24 @@ def one_way_messenger(
 # SDK Fixtures
 @pytest_asyncio.fixture
 async def sdk(
-    test_config: Config, mock_db_manager: MagicMock
+    test_config: Config,
+    mock_db_manager: MagicMock,
+    mock_org_repo: MagicMock,
+    mock_agent_repo: MagicMock,
+    mock_message_repo: MagicMock,
+    mock_session_repo: MagicMock,
+    mock_meeting_repo: MagicMock,
 ) -> AsyncGenerator[AgentMessaging, None]:
     """SDK instance for testing."""
     # Mock the PostgreSQLManager import
     with (
-        pytest.mock.patch("agent_messaging.client.PostgreSQLManager", return_value=mock_db_manager),
-        pytest.mock.patch("agent_messaging.client.OrganizationRepository"),
-        pytest.mock.patch("agent_messaging.client.AgentRepository"),
-        pytest.mock.patch("agent_messaging.client.MessageRepository"),
-        pytest.mock.patch("agent_messaging.client.SessionRepository"),
-        pytest.mock.patch("agent_messaging.client.MeetingRepository"),
-        pytest.mock.patch("agent_messaging.client.MeetingEventHandler"),
+        patch("agent_messaging.client.PostgreSQLManager", return_value=mock_db_manager),
+        patch("agent_messaging.client.OrganizationRepository", return_value=mock_org_repo),
+        patch("agent_messaging.client.AgentRepository", return_value=mock_agent_repo),
+        patch("agent_messaging.client.MessageRepository", return_value=mock_message_repo),
+        patch("agent_messaging.client.SessionRepository", return_value=mock_session_repo),
+        patch("agent_messaging.client.MeetingRepository", return_value=mock_meeting_repo),
+        patch("agent_messaging.client.MeetingEventHandler"),
     ):
 
         async with AgentMessaging[Dict[str, Any], Dict[str, Any], Dict[str, Any]](
