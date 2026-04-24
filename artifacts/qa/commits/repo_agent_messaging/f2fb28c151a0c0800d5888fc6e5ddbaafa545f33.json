@@ -1,0 +1,66 @@
+{
+  "commit": "f2fb28c151a0c0800d5888fc6e5ddbaafa545f33",
+  "scope": "repo_agent_messaging",
+  "datetime": "2026-04-21T17:32:49Z",
+  "author": "qa-runner",
+  "files_changed": [
+    "agent_messaging/__init__.py",
+    "agent_messaging/client.py",
+    "agent_messaging/config.py",
+    "agent_messaging/database/__init__.py",
+    "agent_messaging/database/manager.py",
+    "agent_messaging/database/repositories/__init__.py",
+    "agent_messaging/database/repositories/agent.py",
+    "agent_messaging/database/repositories/base.py",
+    "agent_messaging/database/repositories/meeting.py",
+    "agent_messaging/database/repositories/message.py",
+    "agent_messaging/database/repositories/organization.py",
+    "agent_messaging/database/repositories/session.py",
+    "agent_messaging/exceptions.py",
+    "agent_messaging/handlers/__init__.py",
+    "agent_messaging/handlers/events.py",
+    "agent_messaging/handlers/registry.py",
+    "agent_messaging/handlers/types.py",
+    "agent_messaging/messaging/__init__.py",
+    "agent_messaging/messaging/conversation.py",
+    "agent_messaging/messaging/meeting.py",
+    "agent_messaging/messaging/one_way.py",
+    "agent_messaging/models.py",
+    "agent_messaging/utils/__init__.py",
+    "agent_messaging/utils/locks.py",
+    "agent_messaging/utils/timeouts.py",
+    "tests/__init__.py",
+    "tests/conftest.py",
+    "tests/test_client.py",
+    "tests/test_config.py",
+    "tests/test_conversation.py",
+    "tests/test_global_handlers.py",
+    "tests/test_lock_mechanisms.py",
+    "tests/test_meeting_events.py",
+    "tests/test_meeting_manager.py",
+    "tests/test_meeting_timeout.py",
+    "tests/test_meeting_wait_for_turn.py",
+    "tests/test_message_notification.py",
+    "tests/test_metadata_filtering.py",
+    "tests/test_models.py",
+    "tests/test_one_way_messaging.py",
+    "tests/test_one_way_queries.py",
+    "tests/test_repositories.py",
+    "tests/test_utils.py"
+  ],
+  "affected_tests": {
+    "integration": [
+      "tests/test_lock_mechanisms.py",
+      "tests/test_meeting_wait_for_turn.py",
+      "tests/test_message_notification.py",
+      "tests/test_metadata_filtering.py"
+    ]
+  },
+  "tier_status": {
+    "integration": "fail"
+  },
+  "run_ids": {
+    "integration": "20260421-173636-agent_messaging-integration-f2fb28c"
+  },
+  "computed_via": "coverage.json-seed"
+}

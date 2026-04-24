@@ -1,0 +1,120 @@
+{
+  "test_file": "tests/test_meeting_wait_for_turn.py",
+  "scope": "repo_agent_messaging",
+  "tier": "integration",
+  "last_run": {
+    "commit": "f2fb28c151a0c0800d5888fc6e5ddbaafa545f33",
+    "datetime": "2026-04-21T17:36:36Z",
+    "verdict": "FAIL",
+    "run_id": "20260421-173636-agent_messaging-integration-f2fb28c",
+    "passed": 0,
+    "failed": 9,
+    "skipped": 0,
+    "errored": 0,
+    "duration_s": 0
+  },
+  "tests": [
+    {
+      "nodeid": "TestMeetingWaitForTurn::test_attend_meeting_without_wait",
+      "status": "failed",
+      "duration_s": 0.0,
+      "error": "tests/test_meeting_wait_for_turn.py:23: in test_attend_meeting_without_wait\n    meeting_id = await sdk.meeting.create_meeting(\nagent_messaging/messaging/meeting.py:168: in create_meeting\n    raise ValueError(\"Organizer cannot be a participant\")\nE   ValueError: Organizer cannot be a participant"
+    },
+    {
+      "nodeid": "TestMeetingWaitForTurn::test_attend_meeting_with_wait_before_start",
+      "status": "failed",
+      "duration_s": 0.0,
+      "error": "tests/test_meeting_wait_for_turn.py:45: in test_attend_meeting_with_wait_before_start\n    meeting_id = await sdk.meeting.create_meeting(\nagent_messaging/messaging/meeting.py:168: in create_meeting\n    raise ValueError(\"Organizer cannot be a participant\")\nE   ValueError: Organizer cannot be a participant"
+    },
+    {
+      "nodeid": "TestMeetingWaitForTurn::test_speak_without_wait",
+      "status": "failed",
+      "duration_s": 0.0,
+      "error": "tests/test_meeting_wait_for_turn.py:96: in test_speak_without_wait\n    meeting_id = await sdk.meeting.create_meeting(\nagent_messaging/messaging/meeting.py:168: in create_meeting\n    raise ValueError(\"Organizer cannot be a participant\")\nE   ValueError: Organizer cannot be a participant"
+    },
+    {
+      "nodeid": "TestMeetingWaitForTurn::test_speak_with_wait",
+      "status": "failed",
+      "duration_s": 0.0,
+      "error": "tests/test_meeting_wait_for_turn.py:119: in test_speak_with_wait\n    meeting_id = await sdk.meeting.create_meeting(\nagent_messaging/messaging/meeting.py:168: in create_meeting\n    raise ValueError(\"Organizer cannot be a participant\")\nE   ValueError: Organizer cannot be a participant"
+    },
+    {
+      "nodeid": "TestMeetingWaitForTurn::test_wait_for_turn_with_multiple_messages",
+      "status": "failed",
+      "duration_s": 0.0,
+      "error": "tests/test_meeting_wait_for_turn.py:167: in test_wait_for_turn_with_multiple_messages\n    meeting_id = await sdk.meeting.create_meeting(\nagent_messaging/messaging/meeting.py:168: in create_meeting\n    raise ValueError(\"Organizer cannot be a participant\")\nE   ValueError: Organizer cannot be a participant"
+    },
+    {
+      "nodeid": "TestMeetingWaitForTurn::test_wait_for_turn_meeting_ends",
+      "status": "failed",
+      "duration_s": 0.0,
+      "error": "tests/test_meeting_wait_for_turn.py:223: in test_wait_for_turn_meeting_ends\n    meeting_id = await sdk.meeting.create_meeting(\nagent_messaging/messaging/meeting.py:168: in create_meeting\n    raise ValueError(\"Organizer cannot be a participant\")\nE   ValueError: Organizer cannot be a participant"
+    },
+    {
+      "nodeid": "TestMeetingWaitForTurn::test_speak_wait_for_turn_meeting_ends",
+      "status": "failed",
+      "duration_s": 0.0,
+      "error": "tests/test_meeting_wait_for_turn.py:267: in test_speak_wait_for_turn_meeting_ends\n    meeting_id = await sdk.meeting.create_meeting(\nagent_messaging/messaging/meeting.py:168: in create_meeting\n    raise ValueError(\"Organizer cannot be a participant\")\nE   ValueError: Organizer cannot be a participant"
+    },
+    {
+      "nodeid": "TestMeetingWaitForTurn::test_concurrent_wait_for_turn",
+      "status": "failed",
+      "duration_s": 0.0,
+      "error": "tests/test_meeting_wait_for_turn.py:313: in test_concurrent_wait_for_turn\n    meeting_id = await sdk.meeting.create_meeting(\nagent_messaging/messaging/meeting.py:168: in create_meeting\n    raise ValueError(\"Organizer cannot be a participant\")\nE   ValueError: Organizer cannot be a participant"
+    },
+    {
+      "nodeid": "TestMeetingWaitForTurn::test_wait_for_turn_message_ordering",
+      "status": "failed",
+      "duration_s": 0.0,
+      "error": "tests/test_meeting_wait_for_turn.py:359: in test_wait_for_turn_message_ordering\n    meeting_id = await sdk.meeting.create_meeting(\nagent_messaging/messaging/meeting.py:168: in create_meeting\n    raise ValueError(\"Organizer cannot be a participant\")\nE   ValueError: Organizer cannot be a participant"
+    }
+  ],
+  "coverage_summary": {
+    "covered_files": 43,
+    "source_files": [
+      "agent_messaging/__init__.py",
+      "agent_messaging/client.py",
+      "agent_messaging/config.py",
+      "agent_messaging/database/__init__.py",
+      "agent_messaging/database/manager.py",
+      "agent_messaging/database/repositories/__init__.py",
+      "agent_messaging/database/repositories/agent.py",
+      "agent_messaging/database/repositories/base.py",
+      "agent_messaging/database/repositories/meeting.py",
+      "agent_messaging/database/repositories/message.py",
+      "agent_messaging/database/repositories/organization.py",
+      "agent_messaging/database/repositories/session.py",
+      "agent_messaging/exceptions.py",
+      "agent_messaging/handlers/__init__.py",
+      "agent_messaging/handlers/events.py",
+      "agent_messaging/handlers/registry.py",
+      "agent_messaging/handlers/types.py",
+      "agent_messaging/messaging/__init__.py",
+      "agent_messaging/messaging/conversation.py",
+      "agent_messaging/messaging/meeting.py",
+      "agent_messaging/messaging/one_way.py",
+      "agent_messaging/models.py",
+      "agent_messaging/utils/__init__.py",
+      "agent_messaging/utils/locks.py",
+      "agent_messaging/utils/timeouts.py",
+      "tests/__init__.py",
+      "tests/conftest.py",
+      "tests/test_client.py",
+      "tests/test_config.py",
+      "tests/test_conversation.py",
+      "tests/test_global_handlers.py",
+      "tests/test_lock_mechanisms.py",
+      "tests/test_meeting_events.py",
+      "tests/test_meeting_manager.py",
+      "tests/test_meeting_timeout.py",
+      "tests/test_meeting_wait_for_turn.py",
+      "tests/test_message_notification.py",
+      "tests/test_metadata_filtering.py",
+      "tests/test_models.py",
+      "tests/test_one_way_messaging.py",
+      "tests/test_one_way_queries.py",
+      "tests/test_repositories.py",
+      "tests/test_utils.py"
+    ]
+  }
+}
