@@ -19,10 +19,10 @@ class TestMeetingWaitForTurn:
         await sdk.register_agent("bob", "org_001", "Bob")
         await sdk.register_agent("charlie", "org_001", "Charlie")
 
-        # Create meeting
+        # Create meeting (organizer should not be in participants list)
         meeting_id = await sdk.meeting.create_meeting(
             organizer_external_id="alice",
-            participant_external_ids=["alice", "bob", "charlie"],
+            participant_external_ids=["bob", "charlie"],
             turn_duration=60.0,
         )
 
@@ -41,10 +41,10 @@ class TestMeetingWaitForTurn:
         await sdk.register_agent("bob", "org_001", "Bob")
         await sdk.register_agent("charlie", "org_001", "Charlie")
 
-        # Create meeting
+        # Create meeting (organizer should not be in participants list)
         meeting_id = await sdk.meeting.create_meeting(
             organizer_external_id="alice",
-            participant_external_ids=["alice", "bob", "charlie"],
+            participant_external_ids=["bob", "charlie"],
             turn_duration=60.0,
         )
 
@@ -92,15 +92,14 @@ class TestMeetingWaitForTurn:
         await sdk.register_agent("alice", "org_001", "Alice")
         await sdk.register_agent("bob", "org_001", "Bob")
 
-        # Create meeting
+        # Create meeting (organizer should not be in participants list)
         meeting_id = await sdk.meeting.create_meeting(
             organizer_external_id="alice",
-            participant_external_ids=["alice", "bob"],
+            participant_external_ids=["bob"],
             turn_duration=60.0,
         )
 
-        # Attend and start
-        await sdk.meeting.attend_meeting("alice", meeting_id)
+        # Attend and start (organizer doesn't need to attend)
         await sdk.meeting.attend_meeting("bob", meeting_id)
         await sdk.meeting.start_meeting("alice", meeting_id)
 
@@ -115,15 +114,14 @@ class TestMeetingWaitForTurn:
         await sdk.register_agent("alice", "org_001", "Alice")
         await sdk.register_agent("bob", "org_001", "Bob")
 
-        # Create meeting
+        # Create meeting (organizer should not be in participants list)
         meeting_id = await sdk.meeting.create_meeting(
             organizer_external_id="alice",
-            participant_external_ids=["alice", "bob"],
+            participant_external_ids=["bob"],
             turn_duration=60.0,
         )
 
-        # Attend and start
-        await sdk.meeting.attend_meeting("alice", meeting_id)
+        # Attend and start (organizer doesn't need to attend)
         await sdk.meeting.attend_meeting("bob", meeting_id)
         await sdk.meeting.start_meeting("alice", meeting_id)
 
@@ -163,10 +161,10 @@ class TestMeetingWaitForTurn:
         await sdk.register_agent("bob", "org_001", "Bob")
         await sdk.register_agent("charlie", "org_001", "Charlie")
 
-        # Create meeting
+        # Create meeting (organizer should not be in participants list)
         meeting_id = await sdk.meeting.create_meeting(
             organizer_external_id="alice",
-            participant_external_ids=["alice", "bob", "charlie"],
+            participant_external_ids=["bob", "charlie"],
             turn_duration=60.0,
         )
 
@@ -219,15 +217,14 @@ class TestMeetingWaitForTurn:
         await sdk.register_agent("alice", "org_001", "Alice")
         await sdk.register_agent("bob", "org_001", "Bob")
 
-        # Create meeting
+        # Create meeting (organizer should not be in participants list)
         meeting_id = await sdk.meeting.create_meeting(
             organizer_external_id="alice",
-            participant_external_ids=["alice", "bob"],
+            participant_external_ids=["bob"],
             turn_duration=60.0,
         )
 
-        # Attend and start
-        await sdk.meeting.attend_meeting("alice", meeting_id)
+        # Attend and start (organizer doesn't need to attend)
         await sdk.meeting.attend_meeting("bob", meeting_id)
         await sdk.meeting.start_meeting("alice", meeting_id)
 
@@ -263,15 +260,14 @@ class TestMeetingWaitForTurn:
         await sdk.register_agent("alice", "org_001", "Alice")
         await sdk.register_agent("bob", "org_001", "Bob")
 
-        # Create meeting
+        # Create meeting (organizer should not be in participants list)
         meeting_id = await sdk.meeting.create_meeting(
             organizer_external_id="alice",
-            participant_external_ids=["alice", "bob"],
+            participant_external_ids=["bob"],
             turn_duration=60.0,
         )
 
-        # Attend and start
-        await sdk.meeting.attend_meeting("alice", meeting_id)
+        # Attend and start (organizer doesn't need to attend)
         await sdk.meeting.attend_meeting("bob", meeting_id)
         await sdk.meeting.start_meeting("alice", meeting_id)
 
@@ -309,15 +305,14 @@ class TestMeetingWaitForTurn:
         await sdk.register_agent("charlie", "org_001", "Charlie")
         await sdk.register_agent("dave", "org_001", "Dave")
 
-        # Create meeting
+        # Create meeting (organizer should not be in participants list)
         meeting_id = await sdk.meeting.create_meeting(
             organizer_external_id="alice",
-            participant_external_ids=["alice", "bob", "charlie", "dave"],
+            participant_external_ids=["bob", "charlie", "dave"],
             turn_duration=60.0,
         )
 
-        # All attend
-        await sdk.meeting.attend_meeting("alice", meeting_id)
+        # All attend (organizer doesn't need to attend)
         await sdk.meeting.attend_meeting("bob", meeting_id)
         await sdk.meeting.attend_meeting("charlie", meeting_id)
         await sdk.meeting.attend_meeting("dave", meeting_id)
@@ -355,10 +350,10 @@ class TestMeetingWaitForTurn:
         await sdk.register_agent("bob", "org_001", "Bob")
         await sdk.register_agent("charlie", "org_001", "Charlie")
 
-        # Create meeting
+        # Create meeting (organizer should not be in participants list)
         meeting_id = await sdk.meeting.create_meeting(
             organizer_external_id="alice",
-            participant_external_ids=["alice", "bob", "charlie"],
+            participant_external_ids=["bob", "charlie"],
             turn_duration=60.0,
         )
 
