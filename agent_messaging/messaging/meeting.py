@@ -374,8 +374,8 @@ class MeetingManager(Generic[T_Meeting]):
         # Record the timestamp when we start waiting
         start_timestamp = datetime.utcnow()
 
-        # Create an agent-specific lock (agent can only attend one meeting at a time with lock)
-        agent_lock = SessionLock(f"agent_{agent.id}_meeting_{meeting_id}")
+        # Use meeting-scoped advisory lock while waiting for turn
+        agent_lock = SessionLock(meeting_id)
 
         # Acquire lock and wait for turn
         async with self._message_repo.db_manager.connection() as connection:
@@ -581,8 +581,8 @@ class MeetingManager(Generic[T_Meeting]):
                 f"Agent {agent_external_id} waiting for turn to speak in meeting {meeting_id}"
             )
 
-            # Create an agent-specific lock for waiting
-            agent_lock = SessionLock(f"agent_{agent.id}_speaking_{meeting_id}")
+            # Use meeting-scoped advisory lock while waiting for turn
+            agent_lock = SessionLock(meeting_id)
 
             async with self._message_repo.db_manager.connection() as connection:
                 lock_acquired = await agent_lock.acquire(connection)

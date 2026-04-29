@@ -10,6 +10,7 @@ from agent_messaging.config import Config, DatabaseConfig, MessagingConfig
 class TestDatabaseConfig:
     """Test DatabaseConfig model."""
 
+    @patch.dict(os.environ, {}, clear=True)
     def test_default_values(self):
         """Test default configuration values."""
         config = DatabaseConfig()

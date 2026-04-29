@@ -11,7 +11,10 @@ from typing import List
 import pytest
 
 from agent_messaging import AgentMessaging
-from agent_messaging.handlers import register_message_notification_handler
+from agent_messaging.handlers import (
+    register_conversation_handler,
+    register_message_notification_handler,
+)
 from agent_messaging.handlers.types import MessageContext
 
 
@@ -28,7 +31,11 @@ def reset_notification_calls():
 
 
 def setup_notification_handler():
-    """Register the notification handler for tests."""
+    """Register the handlers needed for notification tests."""
+
+    @register_conversation_handler
+    async def handle_conversation(message: dict, context: MessageContext):
+        return None
 
     @register_message_notification_handler
     async def handle_notification(message: dict, context: MessageContext) -> None:
@@ -116,8 +123,10 @@ async def test_notification_handler_not_invoked_when_receiver_locked(
         message={"text": "Hi Bob!"},
     )
 
-    # Give async handler time to execute
-    await asyncio.sleep(0.1)
+    # Poll briefly to ensure no late notification arrives while Bob remains locked
+    for _ in range(5):
+        assert len(notification_calls) == 0
+        await asyncio.sleep(0.05)
 
     # Verify notification was NOT called (Bob is locked)
     assert len(notification_calls) == 0
@@ -158,7 +167,12 @@ async def test_notification_handler_with_send_and_wait(
 
     # Start Alice's send_and_wait
     alice_task = asyncio.create_task(alice_send())
-    await asyncio.sleep(0.1)  # Let message be sent
+
+    # Wait until notification arrives (bounded polling)
+    for _ in range(10):
+        if len(notification_calls) >= 1:
+            break
+        await asyncio.sleep(0.05)
 
     # Verify notification was called for Bob
     assert len(notification_calls) >= 1

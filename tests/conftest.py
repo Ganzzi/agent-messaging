@@ -6,8 +6,15 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from typing import AsyncGenerator, Generator, Dict, Any, List
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch, DEFAULT
 from uuid import uuid4
+
+# Load test environment variables before importing agent_messaging
+_test_env_path = Path(__file__).parent.parent / ".test.env"
+if _test_env_path.exists():
+    from dotenv import load_dotenv
+    load_dotenv(_test_env_path, override=True)
 
 from agent_messaging.client import AgentMessaging
 from agent_messaging.config import Config
@@ -64,12 +71,13 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 @pytest.fixture
 def test_config() -> Config:
     """Test configuration with test database settings."""
-    # Load test environment variables
+    # Load test environment variables (QA credentials)
     os.environ.setdefault("POSTGRES_HOST", "localhost")
     os.environ.setdefault("POSTGRES_PORT", "5433")
-    os.environ.setdefault("POSTGRES_USER", "postgres")
-    os.environ.setdefault("POSTGRES_PASSWORD", "postgres")
+    os.environ.setdefault("POSTGRES_USER", "backend")
+    os.environ.setdefault("POSTGRES_PASSWORD", "backend123")
     os.environ.setdefault("POSTGRES_DATABASE", "agent_messaging_test")
+    os.environ.setdefault("POSTGRES_DB", "agent_messaging_test")
     os.environ.setdefault("POSTGRES_MAX_POOL_SIZE", "5")
     os.environ.setdefault("MESSAGING__DEFAULT_SYNC_TIMEOUT", "5.0")
     os.environ.setdefault("MESSAGING__DEFAULT_MEETING_TURN_DURATION", "10.0")
@@ -89,6 +97,16 @@ async def db_manager(test_config: Config) -> AsyncGenerator[PostgreSQLManager, N
     await manager.close()
 
 
+# Alias for lock tests (backward compatibility)
+@pytest_asyncio.fixture
+async def db_manager_for_locks(test_config: Config) -> AsyncGenerator[PostgreSQLManager, None]:
+    """Database manager for lock tests (alias for db_manager)."""
+    manager = PostgreSQLManager(test_config.database)
+    await manager.initialize()
+    yield manager
+    await manager.close()
+
+
 @pytest.fixture
 def mock_db_manager() -> MagicMock:
     """Mock database manager for unit tests."""
@@ -96,6 +114,15 @@ def mock_db_manager() -> MagicMock:
     manager.initialize = AsyncMock()
     manager.close = AsyncMock()
     manager.pool = MagicMock()
+
+    # Create a mock connection that supports async context manager protocol
+    mock_conn = AsyncMock()
+    mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
+    mock_conn.__aexit__ = AsyncMock(return_value=None)
+
+    # Make connection() return the async context manager
+    manager.connection = MagicMock(return_value=mock_conn)
+
     return manager
 
 
@@ -172,35 +199,81 @@ def mock_org_repo() -> MagicMock:
 def mock_agent_repo() -> MagicMock:
     """Mock agent repository."""
     repo = MagicMock(spec=AgentRepository)
-    repo.create = AsyncMock(return_value=uuid4())
-    repo.get_by_external_id = AsyncMock(
-        return_value=Agent(
+
+    _agents_by_external_id: dict[str, Agent] = {}
+    _agents_by_id: dict[Any, Agent] = {}
+
+    async def _create(external_id, organization_id, name=None, **kwargs):
+        agent = Agent(
             id=uuid4(),
-            external_id="test_agent",
-            organization_id=uuid4(),
-            name="Test Agent",
+            external_id=external_id,
+            organization_id=organization_id,
+            name=name or external_id,
             created_at=MagicMock(),
             updated_at=MagicMock(),
         )
-    )
-    repo.get_by_id = AsyncMock(
-        return_value=Agent(
-            id=uuid4(),
-            external_id="test_agent",
-            organization_id=uuid4(),
-            name="Test Agent",
-            created_at=MagicMock(),
-            updated_at=MagicMock(),
-        )
-    )
+        _agents_by_external_id[external_id] = agent
+        _agents_by_id[agent.id] = agent
+        return agent.id
+
+    async def _get_by_external_id(external_id):
+        explicit_return = repo.get_by_external_id._mock_return_value
+        if explicit_return is not DEFAULT:
+            return explicit_return
+        return _agents_by_external_id.get(external_id)
+
+    async def _get_by_id(agent_id):
+        explicit_return = repo.get_by_id._mock_return_value
+        if explicit_return is not DEFAULT:
+            return explicit_return
+        return _agents_by_id.get(agent_id)
+
+    repo.create = AsyncMock(side_effect=_create)
+    repo.get_by_external_id = AsyncMock(side_effect=_get_by_external_id)
+    repo.get_by_id = AsyncMock(side_effect=_get_by_id)
+    repo._agents_by_external_id = _agents_by_external_id
+    repo._agents_by_id = _agents_by_id
     return repo
 
 
 @pytest.fixture
-def mock_message_repo() -> MagicMock:
+def mock_message_repo(mock_db_manager: MagicMock, mock_agent_repo: MagicMock) -> MagicMock:
     """Mock message repository."""
     repo = MagicMock(spec=MessageRepository)
-    repo.create = AsyncMock(return_value=uuid4())
+    repo.db_manager = mock_db_manager
+
+    _messages: list[Message] = []
+
+    async def _create(**kwargs):
+        sender_id = kwargs.get("sender_id")
+        content = dict(kwargs.get("content", {"text": "test message"}))
+        if "sender_external_id" not in content and sender_id:
+            sender = mock_agent_repo._agents_by_id.get(sender_id)
+            if sender:
+                content["sender_external_id"] = sender.external_id
+
+        message = Message(
+            id=uuid4(),
+            sender_id=sender_id,
+            recipient_id=kwargs.get("recipient_id"),
+            session_id=kwargs.get("session_id"),
+            meeting_id=kwargs.get("meeting_id"),
+            content=content,
+            message_type=kwargs.get("message_type", MessageType.USER_DEFINED),
+            created_at=datetime.utcnow(),
+        )
+        _messages.append(message)
+        return message.id
+
+    async def _get_messages_for_meeting(meeting_id, date_from=None, limit=1000):
+        msgs = [m for m in _messages if m.meeting_id == meeting_id]
+        if date_from is not None:
+            msgs = [m for m in msgs if m.created_at and m.created_at > date_from]
+        msgs.sort(key=lambda m: m.created_at)
+        return msgs[:limit]
+
+    repo.create = AsyncMock(side_effect=_create)
+    repo.get_messages_for_meeting = AsyncMock(side_effect=_get_messages_for_meeting)
     repo.get_by_id = AsyncMock(
         return_value=Message(
             id=uuid4(),
@@ -239,11 +312,42 @@ def mock_session_repo() -> MagicMock:
 def mock_meeting_repo() -> MagicMock:
     """Mock meeting repository."""
     repo = MagicMock(spec=MeetingRepository)
-    repo.create_meeting = AsyncMock(return_value=uuid4())
-    repo.get_by_id = AsyncMock(
-        return_value=Meeting(
-            id=uuid4(),
-            host_id=uuid4(),
+
+    # Store meetings to simulate real behavior
+    _meetings = {}
+    _host_ids = {}  # meeting_id -> host_id mapping
+    _participants = {}  # meeting_id -> list of participant dicts
+
+    async def _create(host_id, *args, **kwargs):
+        meeting_id = uuid4()
+        _host_ids[meeting_id] = host_id
+        _participants[meeting_id] = [
+            {
+                "id": uuid4(),
+                "agent_id": host_id,
+                "join_order": -1,
+                "status": ParticipantStatus.ATTENDING,
+            }
+        ]
+        _meetings[meeting_id] = Meeting(
+            id=meeting_id,
+            host_id=host_id,
+            status=MeetingStatus.CREATED,
+            current_speaker_id=None,
+            turn_duration=kwargs.get('turn_duration'),
+            created_at=MagicMock(),
+            started_at=None,
+            ended_at=None,
+        )
+        return meeting_id
+
+    async def _get_by_id(meeting_id):
+        if meeting_id in _meetings:
+            return _meetings[meeting_id]
+        # Fallback for tests that don't use create
+        return Meeting(
+            id=meeting_id,
+            host_id=_host_ids.get(meeting_id, uuid4()),
             status=MeetingStatus.CREATED,
             current_speaker_id=None,
             turn_duration=None,
@@ -251,7 +355,91 @@ def mock_meeting_repo() -> MagicMock:
             started_at=None,
             ended_at=None,
         )
-    )
+
+    async def _add_participant(meeting_id, agent_id, join_order=None, **kwargs):
+        if meeting_id not in _participants:
+            _participants[meeting_id] = []
+        resolved_join_order = join_order if join_order is not None else len(_participants[meeting_id])
+        _participants[meeting_id].append(
+            {
+                "id": uuid4(),
+                "agent_id": agent_id,
+                "join_order": resolved_join_order,
+                "status": ParticipantStatus.INVITED,
+            }
+        )
+
+    async def _get_participants(meeting_id):
+        if meeting_id in _participants:
+            return [
+                MeetingParticipant(
+                    id=participant["id"],
+                    meeting_id=meeting_id,
+                    agent_id=participant["agent_id"],
+                    join_order=participant["join_order"],
+                    status=participant["status"],
+                )
+                for participant in sorted(_participants[meeting_id], key=lambda p: p["join_order"])
+            ]
+        return []
+
+    async def _start_meeting(meeting_id):
+        if meeting_id in _meetings:
+            _meetings[meeting_id].status = MeetingStatus.ACTIVE
+
+    async def _set_current_speaker(meeting_id, agent_id, turn_started=True):
+        if meeting_id in _meetings:
+            _meetings[meeting_id].current_speaker_id = agent_id
+
+    async def _get_participant(meeting_id, agent_id):
+        for participant in _participants.get(meeting_id, []):
+            if participant["agent_id"] == agent_id:
+                return MeetingParticipant(
+                    id=participant["id"],
+                    meeting_id=meeting_id,
+                    agent_id=participant["agent_id"],
+                    join_order=participant["join_order"],
+                    status=participant["status"],
+                )
+        return None
+
+    async def _update_participant_status(participant_id=None, meeting_id=None, agent_id=None, status=None):
+        for current_meeting_id, entries in _participants.items():
+            for participant in entries:
+                if participant_id is not None and participant["id"] == participant_id:
+                    participant["status"] = status
+                    return
+                if (
+                    meeting_id is not None
+                    and agent_id is not None
+                    and current_meeting_id == meeting_id
+                    and participant["agent_id"] == agent_id
+                ):
+                    participant["status"] = status
+                    return
+
+    async def _end_meeting(meeting_id):
+        if meeting_id in _meetings:
+            _meetings[meeting_id].status = MeetingStatus.ENDED
+
+    async def _update(meeting_id, **kwargs):
+        if meeting_id in _meetings:
+            for key, value in kwargs.items():
+                if hasattr(_meetings[meeting_id], key):
+                    setattr(_meetings[meeting_id], key, value)
+
+    repo.create = AsyncMock(side_effect=_create)
+    repo.create_meeting = AsyncMock(side_effect=_create)
+    repo.add_participant = AsyncMock(side_effect=_add_participant)
+    repo.get_participants = AsyncMock(side_effect=_get_participants)
+    repo.get_participant = AsyncMock(side_effect=_get_participant)
+    repo.update_participant_status = AsyncMock(side_effect=_update_participant_status)
+    repo.start_meeting = AsyncMock(side_effect=_start_meeting)
+    repo.set_current_speaker = AsyncMock(side_effect=_set_current_speaker)
+    repo.end_meeting = AsyncMock(side_effect=_end_meeting)
+    repo.get_by_host_id = AsyncMock(return_value=[])
+    repo.update = AsyncMock(side_effect=_update)
+    repo.get_by_id = AsyncMock(side_effect=_get_by_id)
     return repo
 
 
@@ -296,6 +484,15 @@ async def sdk(
     mock_meeting_repo: MagicMock,
 ) -> AsyncGenerator[AgentMessaging, None]:
     """SDK instance for testing."""
+    # Create a mock event handler with async methods
+    mock_event_handler = MagicMock()
+    mock_event_handler.emit_participant_joined = AsyncMock()
+    mock_event_handler.emit_participant_left = AsyncMock()
+    mock_event_handler.emit_meeting_started = AsyncMock()
+    mock_event_handler.emit_meeting_ended = AsyncMock()
+    mock_event_handler.emit_turn_changed = AsyncMock()
+    mock_event_handler.emit_message_posted = AsyncMock()
+
     # Mock the PostgreSQLManager import
     with (
         patch("agent_messaging.client.PostgreSQLManager", return_value=mock_db_manager),
@@ -304,7 +501,7 @@ async def sdk(
         patch("agent_messaging.client.MessageRepository", return_value=mock_message_repo),
         patch("agent_messaging.client.SessionRepository", return_value=mock_session_repo),
         patch("agent_messaging.client.MeetingRepository", return_value=mock_meeting_repo),
-        patch("agent_messaging.client.MeetingEventHandler"),
+        patch("agent_messaging.client.MeetingEventHandler", return_value=mock_event_handler),
     ):
 
         async with AgentMessaging[Dict[str, Any], Dict[str, Any], Dict[str, Any]](

@@ -81,9 +81,9 @@ class TestMeetingWaitForTurn:
         assert isinstance(messages, list)
         # Should have at least Alice's message
         assert len(messages) >= 1
-        alice_msg = next((m for m in messages if m["sender_external_id"] == "alice"), None)
+        alice_msg = next((m for m in messages if m.get("sender_external_id") == "alice"), None)
         assert alice_msg is not None
-        assert alice_msg["content"]["text"] == "Hello from Alice!"
+        assert alice_msg.get("text") == "Hello from Alice!"
 
     async def test_speak_without_wait(self, sdk: AgentMessaging):
         """Test speak with wait_for_turn=False (default, raises error if not turn)."""
@@ -149,9 +149,9 @@ class TestMeetingWaitForTurn:
         assert isinstance(messages, list)
         # Should have Alice's message
         assert len(messages) >= 1
-        alice_msg = next((m for m in messages if m["sender_external_id"] == "alice"), None)
+        alice_msg = next((m for m in messages if m.get("sender_external_id") == "alice"), None)
         assert alice_msg is not None
-        assert alice_msg["content"]["text"] == "Alice speaking first"
+        assert alice_msg.get("text") == "Alice speaking first"
 
     async def test_wait_for_turn_with_multiple_messages(self, sdk: AgentMessaging):
         """Test that wait_for_turn returns all messages that occurred while waiting."""
@@ -202,13 +202,13 @@ class TestMeetingWaitForTurn:
         assert success is True
         assert len(messages) >= 2
 
-        alice_msg = next((m for m in messages if m["sender_external_id"] == "alice"), None)
-        bob_msg = next((m for m in messages if m["sender_external_id"] == "bob"), None)
+        alice_msg = next((m for m in messages if m.get("sender_external_id") == "alice"), None)
+        bob_msg = next((m for m in messages if m.get("sender_external_id") == "bob"), None)
 
         assert alice_msg is not None
         assert bob_msg is not None
-        assert alice_msg["content"]["text"] == "Message from Alice"
-        assert bob_msg["content"]["text"] == "Message from Bob"
+        assert alice_msg.get("text") == "Message from Alice"
+        assert bob_msg.get("text") == "Message from Bob"
 
     async def test_wait_for_turn_meeting_ends(self, sdk: AgentMessaging):
         """Test wait_for_turn behavior when meeting ends while waiting."""

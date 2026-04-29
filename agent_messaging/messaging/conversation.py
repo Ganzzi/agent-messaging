@@ -256,8 +256,8 @@ class Conversation(Generic[T_Conversation]):
                 )
 
                 # Check if recipient is currently locked (waiting for a response)
-                # If not locked, notify them that a message arrived
-                if session.locked_agent_id != recipient.id:
+                # Notify when recipient is unlocked OR recipient is the one currently locked/waiting.
+                if session.locked_agent_id is None or session.locked_agent_id == recipient.id:
                     # Create notification context
                     notification_context = MessageContext(
                         sender_id=sender_external_id,
@@ -507,9 +507,10 @@ class Conversation(Generic[T_Conversation]):
             metadata=metadata or {},
         )
 
-        # Check if recipient is currently locked (waiting for a response)
-        # If not locked, notify them that a message arrived
-        if session.locked_agent_id != recipient.id:
+        latest_session = await self._session_repo.get_by_id(session.id)
+        locked_agent_id = latest_session.locked_agent_id if latest_session else session.locked_agent_id
+
+        if locked_agent_id != recipient.id:
             # Create notification context
             notification_context = MessageContext(
                 sender_id=sender_external_id,
