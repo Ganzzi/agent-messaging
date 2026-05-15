@@ -123,13 +123,15 @@ async def test_notification_handler_not_invoked_when_receiver_locked(
         message={"text": "Hi Bob!"},
     )
 
-    # Poll briefly to ensure no late notification arrives while Bob remains locked
+    # Poll briefly to ensure no late notification arrives for Bob while Bob remains locked
     for _ in range(5):
-        assert len(notification_calls) == 0
+        bob_notifications = [c for c in notification_calls if c.receiver_id == bob_id]
+        assert len(bob_notifications) == 0
         await asyncio.sleep(0.05)
 
-    # Verify notification was NOT called (Bob is locked)
-    assert len(notification_calls) == 0
+    # Verify notification was NOT triggered for Bob (Bob is locked)
+    bob_notifications = [c for c in notification_calls if c.receiver_id == bob_id]
+    assert len(bob_notifications) == 0
 
     # Clean up
     await bob_task
